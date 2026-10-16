@@ -39,6 +39,14 @@ class Routes {
 
   static const String settings = '/settings';
 
+  // Phase 12 coming-soon stubs (no v1 endpoints yet).
+  static const String walletTopup = '/wallet/topup';
+  static const String walletWithdraw = '/wallet/withdraw';
+  static const String walletHistory = '/wallet/history';
+  static const String tickets = '/support/tickets';
+  static const String notificationsList = '/notifications';
+  static const String terminal = '/terminal';
+
   static String serverDetailPath(int id) => '/servers/$id';
   static String serverUsagePath(int id) => '/servers/$id/usage';
   static String serverCredentialsPath(int id) => '/servers/$id/credentials';
