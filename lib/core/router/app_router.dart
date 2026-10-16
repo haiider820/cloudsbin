@@ -8,14 +8,15 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/servers/presentation/access_port_screen.dart';
 import '../../features/servers/presentation/credentials_screen.dart';
+import '../../features/servers/presentation/destroy_screen.dart';
 import '../../features/servers/presentation/firewall_screen.dart';
 import '../../features/servers/presentation/regenerate_screen.dart';
 import '../../features/servers/presentation/server_detail_screen.dart';
 import '../../features/servers/presentation/server_list_screen.dart';
 import '../../features/servers/presentation/server_usage_screen.dart';
 import '../../features/servers/presentation/whitelist_screen.dart';
-import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
 
 /// Single GoRouter instance with an auth-aware redirect.
@@ -111,13 +112,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           serverId: int.parse(state.pathParameters['id']!),
         ),
       ),
-      _comingSoon(Routes.serverAccessPort, 'Access port'),
-      _comingSoon(Routes.serverDestroy, 'Destroy server'),
+      GoRoute(
+        path: Routes.serverAccessPort,
+        builder: (context, state) => AccessPortScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: Routes.serverDestroy,
+        builder: (context, state) => DestroyScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
     ],
   );
 });
-
-GoRoute _comingSoon(String path, String title) => GoRoute(
-      path: path,
-      builder: (context, state) => ComingSoonScreen(title: title),
-    );

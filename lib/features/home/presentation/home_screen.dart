@@ -96,6 +96,18 @@ class HomeScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.go(Routes.serverCredentialsPath(9206568)),
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.settings_ethernet),
+                    title: const Text('Access port'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go(Routes.serverAccessPortPath(9206568)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline),
+                    title: const Text('Destroy'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go(Routes.serverDestroyPath(9206568)),
+                  ),
                 ],
               ),
             ),

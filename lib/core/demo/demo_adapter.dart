@@ -67,6 +67,19 @@ class DemoAdapter implements HttpClientAdapter {
     if (_ends(path, '/servers/firewall-remove')) {
       return _ok({'message': 'Firewall rule removed.', 'rule_id': 92, 'removed': true});
     }
+    if (_ends(path, '/servers/destroy')) {
+      return _ok({'server_id': 9206568, 'status': 'destroyed'});
+    }
+    if (_ends(path, '/servers/access-port')) {
+      return _ok({
+        'message':
+            'Access-port change queued; the agent applies it within a minute.',
+        'access_port': 22,
+        'new_port': 2244,
+        'server_id': 9206568,
+        'command': {'id': 3, 'step': 'open', 'status': 'pending'},
+      });
+    }
     if (_ends(path, '/servers/detail')) {
       final id = int.tryParse('${options.queryParameters['id']}') ?? 9206568;
       return _ok(_detail(id));

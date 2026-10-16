@@ -9,6 +9,7 @@ import 'models/credential_reveal.dart';
 import 'models/firewall.dart';
 import 'models/ip_whitelist.dart';
 import 'models/regenerate_result.dart';
+import 'models/server_actions.dart';
 import 'models/server_detail.dart';
 import 'models/server_refresh_result.dart';
 import 'models/server_summary.dart';
@@ -76,6 +77,40 @@ class ServerRepository {
         },
       );
       return ServerUsage.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/destroy` (§6.22). Requires a re-auth grant and the
+  /// literal `confirm: true`. The row is retained with status `destroyed`.
+  Future<DestroyResult> destroy({
+    required int serverId,
+    required String reauthToken,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/destroy',
+        data: {'server_id': serverId, 'confirm': true},
+        options: Options(headers: {'X-Reauth-Token': reauthToken}),
+      );
+      return DestroyResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/access-port` (§6.26). Queues an agent command.
+  Future<AccessPortResult> accessPort({
+    required int serverId,
+    required int port,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/access-port',
+        data: {'server_id': serverId, 'port': port},
+      );
+      return AccessPortResult.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
