@@ -1,0 +1,298 @@
+// CloudsBin Mobile API v1 — runnable collection (VS Code REST Client).
+// Fill the variables below. No real secrets are stored in this file.
+// See FLUTTER_API_GUIDE.md for the contract behind each call.
+
+@base = http://127.0.0.1/hostphp/api/v1
+@token = YOUR_USER_ACCESS_TOKEN
+@adminToken = YOUR_ADMIN_ACCESS_TOKEN
+@reauth = YOUR_REAUTH_GRANT
+@refreshToken = YOUR_REFRESH_TOKEN
+@serverId = 123
+@planSlug = nano
+@region = us-east
+@idemKey = {{$guid}}
+
+### meta (public)
+GET {{base}}/meta
+
+### register (always 202, neutral)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{"full_name":"New User","email":"new-user@example.com","password":"ChangeMe123","password_confirm":"ChangeMe123","accept_terms":true}
+
+### login (user)
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"mobile-user@test.local","password":"<account password>","device":{"id":"rest-client-1","platform":"android","app_version":"1.0.0"}}
+
+### login (admin)
+POST {{base}}/admin/auth/login
+Content-Type: application/json
+
+{"email":"mobile-admin@test.local","password":"<account password>","device":{"id":"rest-client-adm","platform":"android"}}
+
+### refresh (rotates; never reuse an old refresh token — reuse revokes the session)
+POST {{base}}/auth/refresh
+Content-Type: application/json
+
+{"refresh_token":"{{refreshToken}}"}
+
+### me
+GET {{base}}/me
+Authorization: Bearer {{token}}
+
+### admin me
+GET {{base}}/admin/me
+Authorization: Bearer {{adminToken}}
+
+### sessions
+GET {{base}}/auth/sessions
+Authorization: Bearer {{token}}
+
+### sessions-revoke
+POST {{base}}/auth/sessions-revoke
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"session_id": 123}
+
+### reauth grant (5 min, single use)
+# @name reauth
+POST {{base}}/auth/reauth
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"password":"<account password>"}
+
+### admin reauth grant
+POST {{base}}/admin/auth/reauth
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"password":"<account password>"}
+
+### password-forgot (neutral 202, not implemented)
+POST {{base}}/auth/password-forgot
+Content-Type: application/json
+
+{"email":"mobile-user@test.local"}
+
+### home (dashboard summary)
+GET {{base}}/home
+Authorization: Bearer {{token}}
+
+### plans
+GET {{base}}/plans/list
+Authorization: Bearer {{token}}
+
+### regions
+GET {{base}}/regions/list
+Authorization: Bearer {{token}}
+
+### images (plan_id carries the plan SLUG)
+GET {{base}}/images/list?plan_id={{planSlug}}&region={{region}}
+Authorization: Bearer {{token}}
+
+### estimate (no money moves)
+POST {{base}}/servers/estimate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"vcpu":1,"ram_gb":1,"ssd_gb":25,"region":"{{region}}"}
+
+### create (wallet debit + provision; Idempotency-Key required)
+POST {{base}}/servers/create
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: {{idemKey}}
+
+{"plan_slug":"{{planSlug}}","region":"{{region}}","ssh_public_key":"YOUR_SSH_PUBLIC_KEY"}
+
+### servers list
+GET {{base}}/servers/list?page=1&per_page=20
+Authorization: Bearer {{token}}
+
+### server detail
+GET {{base}}/servers/detail?id={{serverId}}
+Authorization: Bearer {{token}}
+
+### server refresh (reconcile)
+POST {{base}}/servers/refresh
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}}}
+
+### server usage (force=1 bypasses cache, budgeted 10/300s)
+GET {{base}}/servers/usage?id={{serverId}}
+Authorization: Bearer {{token}}
+
+### credentials reveal (needs X-Reauth-Token; auth_type optional, default password)
+POST {{base}}/servers/credentials-reveal
+Authorization: Bearer {{token}}
+X-Reauth-Token: {{reauth}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"auth_type":"password"}
+
+### credentials regenerate (needs X-Reauth-Token)
+POST {{base}}/servers/credentials-regenerate
+Authorization: Bearer {{token}}
+X-Reauth-Token: {{reauth}}
+Content-Type: application/json
+
+{"server_id": {{serverId}}}
+
+### destroy (needs X-Reauth-Token AND confirm:true)
+POST {{base}}/servers/destroy
+Authorization: Bearer {{token}}
+X-Reauth-Token: {{reauth}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"confirm":true}
+
+### ip whitelist
+GET {{base}}/servers/ip-whitelist?id={{serverId}}
+Authorization: Bearer {{token}}
+
+### ip whitelist add
+POST {{base}}/servers/ip-whitelist-add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"cidr_or_ip":"203.0.113.7/32","label":"home"}
+
+### ip whitelist remove
+POST {{base}}/servers/ip-whitelist-remove
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"rule_id": 123}
+
+### access port change (queued for the guest agent)
+POST {{base}}/servers/access-port
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"port":2244}
+
+### firewall rules (inbound only)
+GET {{base}}/servers/firewall?id={{serverId}}
+Authorization: Bearer {{token}}
+
+### firewall add (port | port_start+port_end | port_range)
+POST {{base}}/servers/firewall-add
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"protocol":"tcp","port":8443,"source_cidr":"198.51.100.0/24","description":"app"}
+
+### firewall remove
+POST {{base}}/servers/firewall-remove
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"server_id": {{serverId}},"rule_id": 123}
+
+### orders list
+GET {{base}}/orders/list?page=1&per_page=25
+Authorization: Bearer {{token}}
+
+### orders receipt (multipart; replace path with a real JPG/PNG/WEBP/PDF under 5 MB)
+// Attach the file using your REST client multipart support with field name "receipt".
+POST {{base}}/orders/receipt
+Authorization: Bearer {{token}}
+Idempotency-Key: {{idemKey}}
+Content-Type: multipart/form-data; boundary=----guide
+
+------guide
+Content-Disposition: form-data; name="plan_slug"
+
+{{planSlug}}
+------guide
+Content-Disposition: form-data; name="plan_name"
+
+Starter
+------guide
+Content-Disposition: form-data; name="price_cents"
+
+800
+------guide
+Content-Disposition: form-data; name="region"
+
+{{region}}
+------guide--
+
+### crypto assets
+GET {{base}}/crypto/assets
+Authorization: Bearer {{token}}
+
+### crypto checkout (PENDING order; Idempotency-Key required)
+POST {{base}}/crypto/checkout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: {{idemKey}}
+
+{"plan_slug":"{{planSlug}}","region":"{{region}}","asset":"USDT","chain":"TRC20"}
+
+### crypto order status
+GET {{base}}/crypto/order?order=CRY-put-order-id-here
+Authorization: Bearer {{token}}
+
+### push register (BROKEN on this branch: entry file fatals — see guide §6.35)
+POST {{base}}/push/register
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"fcm_token":"YOUR_FCM_TOKEN","platform":"android"}
+
+### push unregister (BROKEN on this branch)
+POST {{base}}/push/unregister
+Authorization: Bearer {{token}}
+
+### admin push register (BROKEN on this branch)
+POST {{base}}/admin/push/register
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"fcm_token":"YOUR_FCM_TOKEN","platform":"android"}
+
+### admin push unregister (BROKEN on this branch)
+POST {{base}}/admin/push/unregister
+Authorization: Bearer {{adminToken}}
+
+### admin sessions
+GET {{base}}/admin/auth/sessions
+Authorization: Bearer {{adminToken}}
+
+### admin sessions-revoke
+POST {{base}}/admin/auth/sessions-revoke
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"session_id": 123}
+
+### admin refresh
+POST {{base}}/admin/auth/refresh
+Content-Type: application/json
+
+{"refresh_token":"YOUR_ADMIN_REFRESH_TOKEN"}
+
+### logout (revokes current session)
+POST {{base}}/auth/logout
+Authorization: Bearer {{token}}
+
+### logout-all (revokes every session in this audience)
+POST {{base}}/auth/logout-all
+Authorization: Bearer {{token}}
+
+### admin logout
+POST {{base}}/admin/auth/logout
+Authorization: Bearer {{adminToken}}
+
+### admin logout-all
+POST {{base}}/admin/auth/logout-all
+Authorization: Bearer {{adminToken}}

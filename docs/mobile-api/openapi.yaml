@@ -1,0 +1,2096 @@
+openapi: 3.0.3
+
+info:
+  title: HostPHP / CloudsBin Mobile API
+  version: v1
+  description: |
+    Bearer-authenticated JSON API for the Flutter user and admin apps.
+
+    ## Response contract (docs/mobile-api-1-foundation.md section 2)
+    * Success is a **top-level JSON object** — there is no `{data: ...}` envelope.
+    * Failure is `{error, code, request_id}`.
+    * Lists are `{items, page, per_page, total, has_more}`; `per_page` is capped at 50.
+    * Every response carries `X-Request-Id` (16 hex) and `Cache-Control: no-store`.
+    * Timestamps are ISO-8601 UTC (`2026-10-12T07:15:00Z`).
+    * **Money is returned in the unit the database stores** and the field name says
+      which: integer-cents columns end `_cents`, `DECIMAL(10,2)` USD columns end
+      `_usd` and are **strings** (e.g. `"452.00"`). Never a float.
+    * Mobile endpoints never set a cookie and never read `$_SESSION`.
+
+    ## Auth
+    Opaque random tokens, SHA-256 hashed at rest (not JWT). The plaintext is
+    returned **once**, by login/refresh/reauth.
+
+    | | user | admin |
+    |---|---|---|
+    | access token | 15 min | 10 min |
+    | refresh (absolute) | 30 days | 7 days |
+    | refresh idle timeout | 14 days | 24 hours |
+    | re-auth grant | 5 min, single use | 5 min, single use |
+
+    A token is valid for **exactly one audience**: an admin-audience token is not
+    accepted on a user endpoint, nor the reverse. The user audience itself accepts
+    **any** account (an admin is also a customer); admin endpoints additionally
+    require an admin/superadmin role, re-read from the database on every request,
+    so a demotion takes effect on the next call.
+
+    ## Required headers
+    | Header | When |
+    |---|---|
+    | `Authorization: Bearer <token>` | everything except `meta`, `auth/register`, `auth/login`, `auth/refresh`, `auth/password-forgot` |
+    | `X-App-Version` | optional; below `min_app_version` the API answers 426 |
+    | `X-Reauth-Token` | dangerous endpoints: `servers/credentials-reveal`, `servers/credentials-regenerate`, `servers/destroy` (from POST `auth/reauth`; single-use; missing/expired/reused/cross-session is 403 `REAUTH_REQUIRED`) |
+    | `Idempotency-Key` | money-creating POSTs: `servers/create`, `orders/receipt`, `crypto/checkout` (400 when missing or malformed, 8..80 chars `[A-Za-z0-9._:-]`) |
+
+  license:
+    name: Proprietary
+
+servers:
+  - url: /api/v1
+    description: Relative to the app root (dev is /hostphp/api/v1)
+
+tags:
+  - name: meta
+    description: Public discovery
+  - name: auth
+    description: User audience authentication
+  - name: admin-auth
+    description: Admin audience authentication
+  - name: me
+    description: The caller's own profile
+  - name: catalog
+    description: |
+      Read-only catalog and dashboard surface. **Provider abstraction applies
+      throughout**: nothing here returns a provider name, type, slug, id or an
+      instance id, because the user audience must not learn which cloud serves
+      a plan or a region.
+  - name: ordering
+    description: |
+      Money-moving endpoints: estimate, wallet purchase (Idempotency-Key),
+      order history, receipt upload (Idempotency-Key), crypto assets/checkout
+      (Idempotency-Key)/order status. Price is always **server-computed** -
+      client price or amount fields are ignored (orders/receipt is the
+      documented exception: its client-declared price is only an admin-review
+      hint and no money moves there). Provider abstraction applies throughout.
+  - name: servers
+    description: |
+      Server lifecycle and security surface: list/detail/refresh/usage,
+      credential reveal + regenerate (Reauth), destroy (Reauth + confirm:true),
+      IP whitelist, access port and firewall rules. **Firewall exposes the
+      INBOUND direction only**: every provider's outbound "rules" are additive
+      entries on an allow-all baseline (FUNCTIONAL_REFERENCE Appendix B), so an
+      outbound allow/deny never restricts traffic - `direction != inbound` is
+      400 `DIRECTION_NOT_SUPPORTED`. Provider abstraction applies throughout:
+      no response carries a provider name/slug/id or an instance id.
+      Reveal/regenerate/destroy consume a single-use `X-Reauth-Token`.
+  - name: push
+    description: |
+      FCM device registration. Delivery itself is a cron job over push_outbox,
+      not an API call: titles and bodies are generic and the data payload carries
+      ids and deeplinks only — never a credential, IP, email or amount.
+
+paths:
+  /meta:
+    get:
+      tags: [meta]
+      summary: Public discovery information
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server_time: { type: string, format: date-time }
+                  api_version: { type: string, example: v1 }
+                  min_app_version: { type: string, example: '1.0.0' }
+                  https: { type: boolean }
+                  allow_insecure: { type: boolean }
+        '403': { $ref: '#/components/responses/InsecureTransport' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '426': { $ref: '#/components/responses/AppUpdateRequired' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Create an account
+      description: |
+        **Always answers 202 with the same neutral body**, whether or not the
+        address is already registered, and never returns tokens — a differing
+        response would turn this into an account-enumeration oracle. The client
+        then calls `auth/login`.
+
+        `full_name` is validated exactly like the web form but is **not stored**:
+        the `users` table has no such column.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, email, password, password_confirm, accept_terms]
+              properties:
+                full_name: { type: string, maxLength: 100 }
+                email: { type: string, maxLength: 190 }
+                password: { type: string, minLength: 8, maxLength: 200 }
+                password_confirm: { type: string, maxLength: 200 }
+                accept_terms: { type: boolean, enum: [true] }
+                ref: { type: string, maxLength: 20, description: referral code, optional }
+      responses:
+        '202':
+          description: Accepted (neutral - identical for new and existing emails)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in (user audience)
+      description: |
+        Any failure — wrong password, unknown email — returns the single generic
+        message `Invalid email or password.` so accounts cannot be enumerated.
+        Rate limited 5 per 300 s, keyed by IP + SHA-256(email).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: Invalid credentials (generic)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '426': { $ref: '#/components/responses/AppUpdateRequired' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh token
+      description: |
+        Rotation moves the old hash to `prev_refresh_hash`. Presenting that old
+        token again is treated as theft even inside the 10-second grace window:
+        the session is revoked (`refresh_reuse`) and 401 `SESSION_REVOKED` is
+        returned (observed live; the `retried: true` grace path in code does not
+        trigger because the retry UPDATE matches zero rows after rotation).
+        The app must treat ANY 401 from this endpoint as "signed out" and send
+        the user back to login. Rate limited 30 per 300 s.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Rotated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/TokenPair'
+                  - type: object
+                    properties:
+                      retried: { type: boolean, description: true when this was a grace-window retry }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: Refresh token invalid, expired, reused (session revoked)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the session this request arrived on
+      description: The session is revoked **and its access tokens are deleted**, so it stops working immediately rather than at expiry.
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema: { type: object, properties: { logged_out: { type: boolean } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/logout-all:
+    post:
+      tags: [auth]
+      summary: Revoke every session of this user in this audience
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema: { type: object, properties: { revoked: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/sessions:
+    get:
+      tags: [auth]
+      summary: List the caller's own active sessions
+      description: Never returns a token or a hash. `current` marks the session this request arrived on.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/sessions-revoke:
+    post:
+      tags: [auth]
+      summary: Revoke one of the caller's own sessions
+      description: |
+        A session id that does not exist **or is not owned** answers 404, so
+        ids cannot be probed. Revoking an already-revoked but still-owned
+        session answers 200 again (idempotent success).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id]
+              properties:
+                session_id: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema: { type: object, properties: { revoked: { type: boolean } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Session not found or not owned (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/reauth:
+    post:
+      tags: [auth]
+      summary: Step-up — mint a single-use re-auth grant
+      description: |
+        Re-verifies the password and returns a grant that dangerous endpoints
+        accept as `X-Reauth-Token`. The grant is bound to this session, expires
+        in 5 minutes and is **single use**. Rate limited 5 per 300 s.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Grant issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reauth_token: { type: string, description: send as X-Reauth-Token, exactly once }
+                  expires_at: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Wrong password
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/password-forgot:
+    post:
+      tags: [auth]
+      summary: Request a password reset (NOT IMPLEMENTED — neutral 202)
+      description: |
+        The `feature/password-reset` work does not exist on this repository and
+        production has no MTA, so this returns a neutral 202 rather than
+        pretending to send mail (and rather than leaking whether the address is
+        registered). Rate limited 3 per 3600 s.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+      responses:
+        '202':
+          description: Accepted (neutral)
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /me:
+    get:
+      tags: [me]
+      summary: The caller's own profile (user audience)
+      description: There is no `full_name` — the `users` table has no such column.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Missing, invalid or expired token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Not authorised for this audience
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /home:
+    get:
+      tags: [catalog]
+      summary: The dashboard summary
+      description: |
+        Server counts, wallet balances, unread notifications and pending top-ups
+        for the caller only. `servers.other` is everything that is neither
+        `active` nor `provisioning` (suspended, expired, destroyed, error), so
+        the client never has to derive it.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  servers:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      active: { type: integer }
+                      provisioning: { type: integer }
+                      other: { type: integer }
+                  wallet:
+                    type: object
+                    properties:
+                      available_usd: { type: string, example: '50.00' }
+                      pending_usd: { type: string, example: '0.00' }
+                      lifetime_earned_usd: { type: string, example: '50.00' }
+                  unread_notifications: { type: integer }
+                  pending_topups: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /plans/list:
+    get:
+      tags: [catalog]
+      summary: Live plans with specs, price and allowed regions
+      description: |
+        **No provider fields.** The user audience must not be able to learn
+        which cloud provider serves a plan (`provider_name`, `provider_type`,
+        `provider_id`, `provider_slug` are all absent by design).
+
+        Prices are integer **cents**. `usd_pkr_rate` is returned alongside the
+        list so the client can show a converted figure without the server doing
+        float maths on a money field.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      usd_pkr_rate: { type: number, example: 280 }
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Plan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /regions/list:
+    get:
+      tags: [catalog]
+      summary: Regions at least one active provider can serve
+      description: |
+        Provider-agnostic: a region is listed only when some active provider has
+        an active mapping for it, so the app can never offer a region that would
+        fail at checkout — and can never infer which cloud backs it.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            slug: { type: string, example: us-east }
+                            display_name: { type: string, example: US East }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /images/list:
+    get:
+      tags: [catalog]
+      summary: OS images for a plan
+      description: |
+        The provider is resolved server-side from the plan and never returned.
+        Supplying a `region` the plan's provider does not serve is a **409**,
+        not a silently empty list, so the client can explain why.
+      parameters:
+        - name: plan_id
+          in: query
+          required: true
+          schema: { type: string }
+          description: The plan **slug** (the app's plan identifier).
+        - name: region
+          in: query
+          required: false
+          schema: { type: string }
+          description: Region slug. Must be one the plan can be bought in.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  default: { type: string, nullable: true }
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        slug: { type: string }
+                        name: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Unknown plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: The region is not available for that plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/estimate:
+    post:
+      tags: [ordering]
+      summary: Custom-build price estimate (server-side pricing)
+      description: |
+        Prices a custom build through the same resolver provisioning uses.
+        No money moves and nothing is stored. `region` (slug) or `region_id`
+        may carry the region; an unknown or inactive region is a 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vcpu, ram_gb, ssd_gb]
+              properties:
+                vcpu: { type: integer, minimum: 1 }
+                ram_gb: { type: number, minimum: 1 }
+                ssd_gb: { type: integer, minimum: 1 }
+                region: { type: string, description: Region slug (from regions/list) }
+                region_id: { type: integer, description: Alternative to region }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  price_cents: { type: integer, description: integer CENTS, never a float }
+                  price_display: { type: string, example: '$8.63' }
+                  vcpu: { type: integer }
+                  ram_gb: { type: number }
+                  ssd_gb: { type: integer }
+                  included_ssd: { type: integer }
+                  region: { type: string }
+                  region_slug: { type: string, example: us-east }
+        '400':
+          description: 'INVALID_SPECS, INVALID_REGION or NO_MATCHING_PROVIDER'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /servers/create:
+    post:
+      tags: [ordering]
+      summary: Buy a server with the wallet balance (Idempotency-Key required)
+      description: |
+        Debits the wallet and provisions inside ONE transaction: an
+        insufficient balance is 402 with zero state change, and a provisioning
+        failure rolls the debit back. **Price is server-computed** from the
+        live tables; any `price_cents`/`total_cents` in the body is ignored.
+        Custom builds send `plan_slug: custom` + `custom_specs`; `plan_id`
+        (numeric) is accepted instead of `plan_slug`. The response never
+        carries a provider field (`instance_id` is dropped).
+
+        Idempotency: the first call claims the key (`in_progress`) and stores
+        the 2xx status + body; the same key with the same body replays that
+        stored response with an `Idempotent-Replay: true` header; a different
+        body is 422 `IDEMPOTENCY_MISMATCH`; a key still in progress is 409
+        `CONFLICT`. A non-2xx outcome releases the claim so a retry
+        re-executes.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [region, ssh_public_key]
+              properties:
+                plan_slug: { type: string, example: nano, description: "'custom' for a custom build" }
+                plan_id: { type: integer, description: Alternative to plan_slug (plans.id) }
+                plan_name: { type: string }
+                region: { type: string, description: Region slug }
+                image: { type: string, description: OS image slug from images/list }
+                autoscale: { type: boolean }
+                ssh_public_key: { type: string, description: OpenSSH public key, stored raw }
+                custom_specs:
+                  type: object
+                  description: Required when plan_slug is custom
+                  properties:
+                    vcpu: { type: integer }
+                    ram_gb: { type: number }
+                    ssd_gb: { type: integer }
+      responses:
+        '201':
+          description: Created (provisioning started)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerCreated' }
+        '400':
+          description: 'VALIDATION_FAILED, INVALID_JSON, INVALID_PLAN, INVALID_REGION, MISSING_CUSTOM_SPECS, INVALID_SSH_PUBLIC_KEY, ...'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402':
+          description: INSUFFICIENT_BALANCE - nothing debited, nothing created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: CONFLICT - this Idempotency-Key is still in progress; retry shortly
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: IDEMPOTENCY_MISMATCH - the key was used with a different body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/list:
+    get:
+      tags: [servers]
+      summary: The caller's servers (paginated)
+      description: |
+        Owned servers only, newest first. `provisioning` (progress/stage/ETA)
+        is attached while a server is provisioning or pending. Provider
+        columns are stripped: no provider name/slug/id and no instance id.
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/ServerSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/detail:
+    get:
+      tags: [servers]
+      summary: One server (customer columns only)
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerDetail' }
+        '400':
+          description: VALIDATION_FAILED - missing/invalid id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND - another user's server is also 404, never 403
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/refresh:
+    post:
+      tags: [servers]
+      summary: Ownership-scoped reconcile (rate limited)
+      description: |
+        Re-reads the provider status for one owned server and reconciles the
+        local row, then releases any locks before the outbound call. Rate
+        limited (`mobile_server_refresh`, 20 per 5 min window). A server that
+        is already active with an IP is returned immediately with
+        `reconciled: false, reason: 'already_active'` (no provider call).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id]
+              properties:
+                server_id: { type: integer }
+      responses:
+        '200':
+          description: OK - server projection plus reconcile info (no progress/bandwidth keys here)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string, nullable: true }
+                  status: { type: string }
+                  ip_address: { type: string, nullable: true }
+                  access_port: { type: integer }
+                  plan_name: { type: string, nullable: true }
+                  region: { type: string }
+                  os: { type: string, nullable: true }
+                  vcpu: { type: integer, nullable: true }
+                  ram_gb: { type: number, nullable: true }
+                  ssd_gb: { type: integer, nullable: true }
+                  created_at: { type: string, format: date-time }
+                  activated_at: { type: string, format: date-time, nullable: true }
+                  destroyed_at: { type: string, format: date-time, nullable: true }
+                  reconciled: { type: boolean }
+                  reason: { type: string, nullable: true, example: already_active }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503':
+          description: PROVIDER_ERROR
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/usage:
+    get:
+      tags: [servers]
+      summary: Bandwidth usage (1-hour cache; force rate limited)
+      description: |
+        Reads the shared `server_usage` cache; `?force=1` bypasses it and hits
+        the provider (rate limited `mobile_usage_force`, 10 per 5 min window -
+        the budget is spent even when the call then fails, so the 11th forced
+        call is 429). 409 `USAGE_UNAVAILABLE` when the server has no provider
+        instance; provider failures also answer 409, never 503. The body is
+        flat (bytes, not GB) with the server id alongside.
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: integer } }
+        - { name: force, in: query, schema: { type: integer, enum: [0, 1] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerUsage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND - another user's server is also 404, never 403
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: USAGE_UNAVAILABLE - no provider instance, or the provider call failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /servers/credentials-reveal:
+    post:
+      tags: [servers]
+      summary: 'Reveal a stored credential (Reauth) [PROTECTED]'
+      description: |
+        **Requires `X-Reauth-Token`.** Returns the decrypted credential for an
+        ACTIVE owned server exactly once per call - reveal is *counted*
+        (`reveal_count` increments and both log files get a line) but the web
+        behaviour is not one-shot: a second reveal succeeds again. The
+        response always carries `Cache-Control: no-store`. The credential
+        appears only in this response body - never in credential-access.log,
+        security.log or any other log. NOTE: rows whose `auth_type` is the
+        legacy `invalid_orphaned` value are filtered out by the auth_type
+        lookup and answer 404 `NO_CREDENTIALS` (the `CREDENTIALS_INVALID`
+        branch in the service is unreachable in web and mobile alike - a
+        pre-existing dead branch, preserved verbatim by the extraction).
+      parameters:
+        - $ref: '#/components/parameters/ReauthToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id]
+              properties:
+                server_id: { type: integer }
+                auth_type: { type: string, enum: [password, ttyd, vnc, rdp], default: password }
+      responses:
+        '200':
+          description: 'OK (Cache-Control: no-store)'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  auth_type: { type: string, example: password }
+                  credential: { type: string, description: Plaintext - never logged }
+                  ip_address: { type: string }
+        '400':
+          description: 'VALIDATION_FAILED (bad server_id) or INVALID_AUTH_TYPE'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: 'REAUTH_REQUIRED - missing, expired, reused or cross-session grant'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: NOT_FOUND or NO_CREDENTIALS (foreign server included; legacy invalid_orphaned rows land here)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: SERVER_NOT_ACTIVE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/credentials-regenerate:
+    post:
+      tags: [servers]
+      summary: 'Rotate the root password at the provider (Reauth) [PROTECTED]'
+      description: |
+        **Requires `X-Reauth-Token`.** Asks the provider to rotate the root
+        password, then stores only the ENCRYPTED new credential - the
+        plaintext is never returned, never logged, and grep over the HTTP
+        response and both log files finds no secret. Armored with
+        `ignore_user_abort` + `set_time_limit(300)` so a dropped client
+        cannot kill the rotation mid-flight. A provider failure is 500
+        `PROVIDER_ERROR` after the web page's 503 mapping is preserved for
+        web parity (mobile maps CloudProviderException to 503
+        `PROVIDER_ERROR`).
+      parameters:
+        - $ref: '#/components/parameters/ReauthToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id]
+              properties:
+                server_id: { type: integer }
+      responses:
+        '200':
+          description: OK (no credential in the body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server_id: { type: integer }
+                  message:
+                    type: string
+                    example: 'A new root password was generated. Reveal it to see the value.'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: 'REAUTH_REQUIRED, or ORDER_NOT_ACTIVE (order suspended/cancelled)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: SERVER_NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: SERVER_NOT_ACTIVE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503':
+          description: PROVIDER_ERROR - rotation failed at the cloud provider
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/destroy:
+    post:
+      tags: [servers]
+      summary: 'Destroy a server (Reauth + confirm:true) [PROTECTED]'
+      description: |
+        **Requires `X-Reauth-Token` AND `confirm: true`.** Deletes the
+        provider instance (skipped when the row has none), then marks the row
+        `destroyed` (retained, never hard-deleted) and cancels any active
+        order. Armored with `ignore_user_abort` + `set_time_limit(300)` in
+        the mobile controller so a disconnect cannot strand a
+        half-destroyed server. Already destroyed is 409 `ALREADY_DESTROYED`;
+        a foreign server is 404 (never 403); a missing confirm is 400
+        `CONFIRM_REQUIRED`.
+      parameters:
+        - $ref: '#/components/parameters/ReauthToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, confirm]
+              properties:
+                server_id: { type: integer }
+                confirm: { type: boolean, enum: [true] }
+      responses:
+        '200':
+          description: OK - row retained with status destroyed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server_id: { type: integer }
+                  status: { type: string, example: destroyed }
+        '400':
+          description: 'CONFIRM_REQUIRED (missing/false confirm) or VALIDATION_FAILED (bad server_id)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: REAUTH_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: CONFLICT - already destroyed (the service-level ALREADY_DESTROYED is unreachable via mobile; the controller answers first)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503':
+          description: PROVIDER_ERROR
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/ip-whitelist:
+    get:
+      tags: [servers]
+      summary: Whitelist rules + current access port
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ips:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        ip_cidr: { type: string }
+                        port: { type: integer, nullable: true }
+                        description: { type: string, nullable: true }
+                        created_at: { type: string, format: date-time }
+                  access_port: { type: integer }
+        '400':
+          description: 'VALIDATION_FAILED (bad id) or NO_INSTANCE (no provider instance)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/ip-whitelist-add:
+    post:
+      tags: [servers]
+      summary: Add a whitelist entry (applied at the provider)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, cidr_or_ip]
+              properties:
+                server_id: { type: integer }
+                cidr_or_ip: { type: string, example: 203.0.113.7/32 }
+                label: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ip_cidr: { type: string }
+                  access_port: { type: integer }
+        '400':
+          description: 'VALIDATION_FAILED (bad fields), INVALID_CIDR (bad format, or the world range), or NO_INSTANCE'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: ALREADY_EXISTS - this IP is already whitelisted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: 'PROVIDER_ERROR or DB_ERROR'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/ip-whitelist-remove:
+    post:
+      tags: [servers]
+      summary: Remove a whitelist entry by rule_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, rule_id]
+              properties:
+                server_id: { type: integer }
+                rule_id: { type: integer, description: The `id` from ip-whitelist }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  rule_id: { type: integer }
+                  removed: { type: boolean, example: true }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: 'NOT_FOUND - foreign/unknown server, or unknown rule'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/access-port:
+    post:
+      tags: [servers]
+      summary: Change the SSH/RDP access port (agent-applied)
+      description: |
+        Validates the port, records a `server_agent_commands` row and lets the
+        guest agent apply the change within a minute. The Security/whitelist
+        endpoint owns the port value itself; firewall rules may not carve the
+        access port (`ACCESS_PORT_CONFLICT`). Rate limited
+        (`mobile_access_port`, 10 per 5 min window).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, port]
+              properties:
+                server_id: { type: integer }
+                port: { type: integer, minimum: 1024, maximum: 65535 }
+      responses:
+        '200':
+          description: OK (change queued, agent applies it)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  access_port: { type: integer }
+                  new_port: { type: integer }
+                  command:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: integer }
+                      step: { type: string }
+                      status: { type: string }
+        '400':
+          description: 'VALIDATION_FAILED (bad fields), INVALID_PORT (outside 1024-65535), RESERVED_PORT, or NO_INSTANCE'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: 'SAME_PORT (already the access port), NOT_ACTIVE, BUSY (a change is already in progress), or RATE_LIMITED (3 changes per server per day)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500':
+          description: 'PROVIDER_ERROR or DB_ERROR'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/firewall:
+    get:
+      tags: [servers]
+      summary: Inbound firewall rules ONLY
+      description: |
+        Lists the stored INBOUND rules for one owned server. Outbound is not
+        exposed (see the servers tag description and FUNCTIONAL_REFERENCE
+        Appendix B) and the response's `directions` array says
+        `["inbound"]` so the app can show that clearly.
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items: { $ref: '#/components/schemas/FirewallRule' }
+                  access_port: { type: integer }
+                  directions:
+                    type: array
+                    items: { type: string, enum: [inbound] }
+        '400':
+          description: 'VALIDATION_FAILED (bad id) or NO_INSTANCE (no provider instance)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /servers/firewall-add:
+    post:
+      tags: [servers]
+      summary: Add an INBOUND firewall rule (outbound is 400)
+      description: |
+        `direction` is accepted for clarity but must be `inbound` (or
+        omitted); anything else is 400 `DIRECTION_NOT_SUPPORTED` - outbound
+        is a no-op on every supported provider (Appendix B). Inbound TCP on
+        the access port is rejected with 400 `ACCESS_PORT_CONFLICT`. Rate
+        limited (`mobile_firewall_add`, 30 per 5 min window).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id]
+              properties:
+                server_id: { type: integer }
+                direction: { type: string, enum: [inbound], default: inbound }
+                protocol: { type: string, enum: [tcp, udp], default: tcp }
+                port: { type: integer, minimum: 1, maximum: 65535, description: Single port (ignored when port_start is given) }
+                port_start: { type: integer, minimum: 1, maximum: 65535, description: Range start (alternative to port) }
+                port_end: { type: integer, minimum: 1, maximum: 65535, description: Range end; defaults to port/port_start }
+                port_range: { type: string, example: '8000-8100', description: Alternative "start-end" string }
+                source_cidr: { type: string, example: 198.51.100.0/24 }
+                description: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  direction: { type: string, enum: [inbound] }
+                  protocol: { type: string }
+                  port_start: { type: integer }
+                  port_end: { type: integer }
+                  source_cidr: { type: string }
+                  access_port: { type: integer }
+        '400':
+          description: 'VALIDATION_FAILED (bad protocol/ports), INVALID_CIDR, DIRECTION_NOT_SUPPORTED, ACCESS_PORT_CONFLICT or ALREADY_OPEN (covered by the default firewall)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: NOT_FOUND (foreign server included)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: ALREADY_EXISTS - identical rule already stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: 'PROVIDER_ERROR or DB_ERROR'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /servers/firewall-remove:
+    post:
+      tags: [servers]
+      summary: Remove a firewall rule by rule_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, rule_id]
+              properties:
+                server_id: { type: integer }
+                rule_id: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  rule_id: { type: integer }
+                  removed: { type: boolean, example: true }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: 'NOT_FOUND - foreign/unknown server, or unknown rule'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /orders/list:
+    get:
+      tags: [ordering]
+      summary: Own payment requests with live server status
+      description: |
+        The customer-facing order history (the dashboard "my requests" query,
+        paginated). Customer columns only: no receipt_path (a `has_receipt`
+        boolean instead) and no provider fields.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /orders/receipt:
+    post:
+      tags: [ordering]
+      summary: Submit a receipt-backed payment request (Idempotency-Key, multipart)
+      description: |
+        The admin-review flow: the client uploads a receipt (JPG/PNG/WEBP/PDF,
+        under 5 MB) and a client-declared `price_cents` - the ONE documented
+        place where a client money field is accepted, because a human reviews
+        the receipt before anything is provisioned. Oversize, wrong MIME
+        (finfo, not the extension) and invalid plans are rejected and any
+        stored file is deleted.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [plan_slug, plan_name, price_cents, receipt]
+              properties:
+                plan_slug: { type: string }
+                plan_name: { type: string }
+                price_cents: { type: integer, description: Client-declared; admin-reviewed }
+                region: { type: string }
+                image: { type: string }
+                autoscale: { type: boolean }
+                custom_specs: { type: string, description: JSON string for custom builds }
+                receipt: { type: string, format: binary }
+      responses:
+        '201':
+          description: Pending request created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id: { type: integer }
+                  status: { type: string, enum: [pending] }
+        '400':
+          description: 'RECEIPT_REQUIRED, UPLOAD_FAILED, RECEIPT_TOO_LARGE, RECEIPT_TYPE_INVALID, INVALID_PLAN, VALIDATION_FAILED, ...'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: CONFLICT - Idempotency-Key still in progress
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: IDEMPOTENCY_MISMATCH
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /crypto/assets:
+    get:
+      tags: [ordering]
+      summary: Admin-enabled crypto assets (active only)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  network: { type: string, example: mainnet }
+                  is_testnet: { type: boolean }
+                  assets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        asset: { type: string, example: BTC }
+                        chain: { type: string, example: BTC }
+                        label: { type: string, example: Bitcoin }
+                        symbol: { type: string, example: BTC }
+                        decimals: { type: integer, example: 8 }
+                        network: { type: string, example: mainnet }
+                        network_name: { type: string, example: Bitcoin Mainnet }
+                        confirmations_required: { type: integer }
+                  btc_rate:
+                    type: object
+                    nullable: true
+                    properties:
+                      rate: { type: number }
+                      updated_at: { type: string, description: 'DB datetime, NOT ISO-8601 (Y-m-d H:i:s)' }
+                      age_sec: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /crypto/checkout:
+    post:
+      tags: [ordering]
+      summary: Create a PENDING crypto payment order (Idempotency-Key required)
+      description: |
+        Returns a receive address, the exact amount (a random suffix keeps
+        concurrent orders disambiguable) and asset metadata. **Price is
+        server-computed** (the plan's `price_cents`, or the custom-build sell
+        price); client price/amount fields are ignored. Rate limited by
+        `crypto_checkout` (20 attempts / 300 s). Same idempotency contract as
+        `servers/create`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_slug]
+              properties:
+                plan_slug: { type: string, example: nano }
+                plan_id: { type: integer, description: Alternative to plan_slug }
+                plan_name: { type: string }
+                region: { type: string }
+                image: { type: string }
+                autoscale: { type: boolean }
+                custom_specs: { type: object, additionalProperties: true }
+                asset: { type: string, example: USDT }
+                chain: { type: string, example: TRC20 }
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: 'Crypto checkout created.' }
+                  id: { type: integer, description: crypto_payments row id }
+                  order_id: { type: string, example: CRY-76fbd1d8 }
+                  wallet_address: { type: string }
+                  amount_requested: { type: string, description: exact crypto amount incl. disambiguation suffix }
+                  asset: { type: string, example: USDT }
+                  chain: { type: string, example: TRC20 }
+                  token_symbol: { type: string, nullable: true }
+                  decimals: { type: integer }
+                  confirmations_required: { type: integer }
+                  network: { type: string, example: mainnet }
+                  network_name: { type: string, example: TRON Mainnet }
+                  explorer: { type: string, nullable: true }
+                  expires_in_sec: { type: integer }
+                  checkout_url: { type: string, description: web checkout page path (order id appended) }
+        '400':
+          description: 'VALIDATION_FAILED, INVALID_PLAN, ASSET_UNAVAILABLE, MISSING_CUSTOM_SPECS, BTC_RATE_UNAVAILABLE, ...'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409':
+          description: CONFLICT - Idempotency-Key still in progress
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: IDEMPOTENCY_MISMATCH
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /crypto/order:
+    get:
+      tags: [ordering]
+      summary: Status of one's own crypto order (ownership in SQL)
+      description: An order that does not exist OR is not owned answers 404 - existence is never revealed.
+      parameters:
+        - name: order
+          in: query
+          required: true
+          schema: { type: string, example: CRY-a1b2c3d4 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                description: |
+                  Datetimes here are DB format (`Y-m-d H:i:s`), NOT ISO-8601 -
+                  the one place in v1 that does not use the `...Z` shape.
+                properties:
+                  order_id: { type: string }
+                  wallet_address: { type: string }
+                  amount_requested: { type: string }
+                  amount_received: { type: string, nullable: true }
+                  tx_hash: { type: string, nullable: true }
+                  tx_url: { type: string, nullable: true }
+                  status: { type: string, example: PENDING }
+                  asset: { type: string }
+                  chain: { type: string }
+                  network: { type: string }
+                  network_name: { type: string }
+                  explorer: { type: string, nullable: true }
+                  token_symbol: { type: string, nullable: true }
+                  decimals: { type: integer }
+                  created_at: { type: string }
+                  expires_at: { type: string }
+                  verified_at: { type: string, nullable: true }
+                  is_expired: { type: boolean }
+                  seconds_left: { type: integer }
+                  payment_request_id: { type: integer, nullable: true }
+                  provision_status: { type: string, example: none }
+                  server_id: { type: integer, nullable: true }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: ORDER_NOT_FOUND - unknown or not owned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+
+  /push/register:
+    post:
+      tags: [push]
+      summary: Register this device's FCM token against the current session
+      description: |
+        >-
+        BROKEN ON THIS BRANCH (observed live): the entry file requires
+        `../../app/bootstrap.php` but sits three levels deep, so every call
+        answers HTTP 200 with a PHP fatal (`Failed opening required ...
+        /api/app/bootstrap.php`). The schema below is the intended contract
+        for when the path is fixed to `../../../app/bootstrap.php`.
+
+        The token is bound to the **session**, not the user, and `fcm_token` is
+        UNIQUE, so a device signing in as somebody else moves the token rather
+        than leaving a second row behind.
+
+        Delivery stops when the session stops: pushes are only sent to tokens
+        whose session is not revoked and whose refresh/idle windows are still
+        open (logging out marks the session revoked).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fcm_token]
+              properties:
+                fcm_token: { type: string, maxLength: 255, description: 'URL-safe token, 10-255 chars' }
+                platform: { type: string, enum: [android, ios] }
+      responses:
+        '200':
+          description: Registered
+          content:
+            application/json:
+              schema: { type: object, properties: { registered: { type: boolean } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503':
+          description: Could not store the token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /push/unregister:
+    post:
+      tags: [push]
+      summary: Drop this session's device tokens
+      description: |
+        Used when the user turns notifications off while staying signed in.
+        BROKEN ON THIS BRANCH like /push/register (same wrong bootstrap
+        require depth) - observed live HTTP 200 with a PHP fatal body.
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema: { type: object, properties: { removed: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/push/register:
+    post:
+      tags: [push, admin-auth]
+      summary: Register this device's FCM token against the current ADMIN session
+      description: >
+        BROKEN ON THIS BRANCH (observed live): the entry file requires
+        `../../../app/bootstrap.php` but sits four levels deep, so every call
+        answers HTTP 200 with a PHP fatal. Fix the require to
+        `../../../../app/bootstrap.php` to restore the contract below.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [fcm_token], properties: { fcm_token: { type: string }, platform: { type: string, enum: [android, ios] } } }
+      responses:
+        '200':
+          description: Registered
+          content:
+            application/json:
+              schema: { type: object, properties: { registered: { type: boolean } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/push/unregister:
+    post:
+      tags: [push, admin-auth]
+      summary: Drop this ADMIN session's device tokens
+      description: >
+        BROKEN ON THIS BRANCH like /admin/push/register (same wrong bootstrap
+        require depth) - observed live HTTP 200 with a PHP fatal body.
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema: { type: object, properties: { removed: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/auth/login:
+    post:
+      tags: [admin-auth]
+      summary: Sign in (admin audience)
+      description: |
+        Same endpoint shape as the user login. A valid account that is **not an
+        admin** receives the identical generic failure, so the endpoint cannot
+        be used to discover which accounts are administrators.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in (admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: Invalid credentials, or the account is not an admin (identical)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '426': { $ref: '#/components/responses/AppUpdateRequired' }
+
+  /admin/auth/refresh:
+    post:
+      tags: [admin-auth]
+      summary: Rotate the refresh token (admin audience)
+      description: An admin session whose role was removed is revoked here rather than allowed to mint more admin access tokens.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [refresh_token], properties: { refresh_token: { type: string } } }
+      responses:
+        '200':
+          description: Rotated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/auth/logout:
+    post:
+      tags: [admin-auth]
+      summary: Revoke this admin session
+      responses:
+        '200': { description: Logged out }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/auth/logout-all:
+    post:
+      tags: [admin-auth]
+      summary: Revoke every admin session of this user
+      responses:
+        '200': { description: Revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/auth/sessions:
+    get:
+      tags: [admin-auth]
+      summary: List the admin sessions of this user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/auth/sessions-revoke:
+    post:
+      tags: [admin-auth]
+      summary: Revoke one of the admin sessions of this user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [session_id], properties: { session_id: { type: integer } } }
+      responses:
+        '200': { description: Revoked }
+        '404': { description: Not found or not owned }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/auth/reauth:
+    post:
+      tags: [admin-auth]
+      summary: Step-up for a dangerous admin action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [password], properties: { password: { type: string } } }
+      responses:
+        '200':
+          description: Grant issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reauth_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '403': { description: Wrong password }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/me:
+    get:
+      tags: [me]
+      summary: The caller's own profile (admin audience)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Not an admin (or a user-audience token)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 80, pattern: '^[A-Za-z0-9._:-]+$' }
+      description: |
+        Client-generated unique key for a money-creating POST. Same key + same
+        body replays the stored 2xx response with `Idempotent-Replay: true`;
+        same key + different body is 422; a key still in progress is 409.
+
+    ReauthToken:
+      name: X-Reauth-Token
+      in: header
+      required: true
+      schema: { type: string }
+      description: |
+        Single-use step-up grant from POST auth/reauth (5 min). Consumed
+        atomically on first use; missing, expired, reused or another
+        session's grant is 403 REAUTH_REQUIRED.
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Opaque access token from auth/login. Sent as an Authorization: Bearer header - never as a query parameter."
+
+  schemas:
+    Error:
+      type: object
+      required: [error, code, request_id]
+      properties:
+        error: { type: string, description: Human-readable message }
+        code: { type: string, description: Machine-readable contract code }
+        request_id: { type: string, description: 16 hex chars; quote this in bug reports }
+
+    LoginRequest:
+      type: object
+      required: [email, password, device]
+      properties:
+        email: { type: string, maxLength: 190 }
+        password: { type: string, maxLength: 200 }
+        device:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string, maxLength: 64, description: client-generated UUID, persisted }
+            name: { type: string, maxLength: 100 }
+            platform: { type: string, enum: [android, ios] }
+            app_version: { type: string, maxLength: 32 }
+
+    TokenPair:
+      type: object
+      description: |
+        Access + refresh pair. `user` is present on auth/login only;
+        auth/refresh returns `retried` instead and no user object.
+      properties:
+        access_token: { type: string }
+        access_expires_at: { type: string, format: date-time }
+        refresh_token: { type: string }
+        refresh_expires_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+        retried: { type: boolean, description: refresh only; true on a grace-window retry (not observed live - reuse currently revokes the session) }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        role: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+        referral_code:
+          type: string
+          nullable: true
+          description: only on /me
+
+    Plan:
+      type: object
+      description: |
+        A purchasable plan. Deliberately carries NO provider identifier — see
+        the catalog tag description.
+      properties:
+        slug: { type: string, example: nano }
+        name: { type: string, example: Nano }
+        display_name: { type: string }
+        description: { type: string, nullable: true }
+        vcpu: { type: integer }
+        ram_gb: { type: number, nullable: true }
+        ssd_gb: { type: integer, nullable: true }
+        specs:
+          type: object
+          description: Human-readable labels, matching what the web pricing page renders.
+          properties:
+            vcpu_label: { type: string, nullable: true, example: 1 vCPU }
+            ram_label: { type: string, nullable: true, example: 1 GB RAM }
+            ssd_label: { type: string, nullable: true, example: 25 GB SSD }
+            transfer: { type: string, nullable: true, example: 1 TB Transfer }
+        price_cents: { type: integer, description: integer CENTS, never a float }
+        eip_price_cents: { type: integer, nullable: true }
+        autoscale_offered: { type: boolean }
+        autoscale_max_slug: { type: string, nullable: true }
+        regions:
+          type: array
+          description: The regions this plan may be bought in.
+          items:
+            type: object
+            properties:
+              slug: { type: string }
+              display_name: { type: string }
+
+    Session:
+      type: object
+      description: A session NEVER exposes a token or a hash.
+      properties:
+        id: { type: integer }
+        device_name: { type: string, nullable: true }
+        platform: { type: string, nullable: true }
+        app_version: { type: string, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        last_ip: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        current: { type: boolean }
+
+    ListEnvelope:
+      type: object
+      properties:
+        items: { type: array, items: {} }
+        page: { type: integer }
+        per_page: { type: integer, maximum: 50 }
+        total: { type: integer }
+        has_more: { type: boolean }
+
+    ServerCreated:
+      type: object
+      description: |
+        Wallet purchase result. Deliberately carries NO `instance_id` or other
+        provider identifier - only customer-facing fields.
+      properties:
+        server_id: { type: integer }
+        status: { type: string, enum: [provisioning] }
+        payment_request_id: { type: integer }
+        plan_name: { type: string }
+        price_cents: { type: integer, description: integer CENTS (plan price; EIP add-on billed separately) }
+        eip_price_cents: { type: integer }
+        total_cents: { type: integer, description: What the wallet was debited }
+        autoscale: { type: boolean }
+
+    Order:
+      type: object
+      description: A payment request as the customer sees it (no provider fields).
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        plan_slug: { type: string }
+        plan_name: { type: string }
+        plan_price_cents: { type: integer }
+        eip_price_cents: { type: integer }
+        total_cents: { type: integer }
+        region: { type: string }
+        image: { type: string }
+        autoscale: { type: boolean }
+        custom_specs: { type: object, nullable: true, additionalProperties: true }
+        has_receipt: { type: boolean }
+        server_id: { type: integer, nullable: true }
+        server_status: { type: string, nullable: true }
+        ip_address: { type: string, nullable: true }
+        admin_note: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    ServerSummary:
+      type: object
+      description: |
+        One row of servers/list. Carries NO provider name, slug, id or
+        instance id (see the servers tag description). While a server is
+        provisioning/password_pending, progress/stage/eta_seconds describe
+        the in-flight work; otherwise progress is 100 (active) or null.
+      properties:
+        id: { type: integer }
+        name: { type: string, nullable: true }
+        status: { type: string, example: active }
+        ip_address: { type: string, nullable: true }
+        access_port: { type: integer, description: live port (stored value, else 22 linux / 3389 windows) }
+        plan_name: { type: string, nullable: true, description: from the creating order; null when none }
+        region: { type: string, description: region slug }
+        os: { type: string, nullable: true, description: image slug }
+        vcpu: { type: integer, nullable: true }
+        ram_gb: { type: number, nullable: true }
+        ssd_gb: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        activated_at: { type: string, format: date-time, nullable: true }
+        destroyed_at: { type: string, format: date-time, nullable: true }
+        progress: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        stage: { type: string, nullable: true }
+        eta_seconds: { type: integer, nullable: true }
+
+    ServerDetail:
+      type: object
+      description: |
+        One server - customer columns only, no provider fields, no price.
+        Same projection as ServerSummary plus a best-effort bandwidth summary
+        (null when the server has no instance or the provider hiccups).
+      properties:
+        id: { type: integer }
+        name: { type: string, nullable: true }
+        status: { type: string }
+        ip_address: { type: string, nullable: true }
+        access_port: { type: integer }
+        plan_name: { type: string, nullable: true }
+        region: { type: string, description: region slug }
+        os: { type: string, nullable: true, description: image slug }
+        vcpu: { type: integer, nullable: true }
+        ram_gb: { type: number, nullable: true }
+        ssd_gb: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        activated_at: { type: string, format: date-time, nullable: true }
+        destroyed_at: { type: string, format: date-time, nullable: true }
+        progress: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        stage: { type: string, nullable: true }
+        eta_seconds: { type: integer, nullable: true }
+        bandwidth:
+          type: object
+          nullable: true
+          description: Usage-cache row in wire shape (never a live call here)
+          properties:
+            bandwidth_in_bytes: { type: integer }
+            bandwidth_out_bytes: { type: integer }
+            total_bytes: { type: integer }
+            cached: { type: boolean }
+            fetched_at: { type: string, format: date-time }
+
+    ServerUsage:
+      type: object
+      description: |
+        Bandwidth for the server, flat (bytes, not GB). `cached` tells whether
+        the row came from the 1-hour server_usage cache; `limit_bytes` is the
+        plan transfer cap in bytes (null when unknown).
+      properties:
+        bandwidth_in_bytes: { type: integer }
+        bandwidth_out_bytes: { type: integer }
+        total_bytes: { type: integer }
+        limit_bytes: { type: integer, nullable: true }
+        cached: { type: boolean }
+        fetched_at: { type: string, format: date-time }
+        server_id: { type: integer }
+
+    FirewallRule:
+      type: object
+      description: Inbound-only on mobile (see the servers tag and Appendix B).
+      properties:
+        id: { type: integer }
+        direction: { type: string, enum: [inbound] }
+        protocol: { type: string, enum: [tcp, udp] }
+        port_start: { type: integer }
+        port_end: { type: integer }
+        ip_cidr: { type: string }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    ValidationFailed:
+      description: 'Bad body (400 VALIDATION_FAILED or INVALID_JSON)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: '401 — AUTH_REQUIRED, TOKEN_EXPIRED or SESSION_REVOKED'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: '403 — FORBIDDEN (wrong audience/role) or REAUTH_REQUIRED'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: '429 — too many attempts; Retry-After is set'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InsecureTransport:
+      description: '403 INSECURE_TRANSPORT — plain HTTP where HTTPS is required'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    AppUpdateRequired:
+      description: '426 APP_UPDATE_REQUIRED — X-App-Version below min_app_version'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    MethodNotAllowed:
+      description: '405 — wrong verb; the Allow header lists what is accepted'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: '500 SERVER_ERROR — generic text only; detail goes to logs/'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+security:
+  - bearerAuth: []
