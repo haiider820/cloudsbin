@@ -45,3 +45,33 @@ class SessionNotifier extends Notifier<SessionState> {
 
 final sessionProvider =
     NotifierProvider<SessionNotifier, SessionState>(SessionNotifier.new);
+
+/// Tracks the admin audience auth state. Completely independent of the user
+/// audience: separate secure-storage keys, separate redirect.
+class AdminSessionNotifier extends Notifier<SessionState> {
+  @override
+  SessionState build() => SessionState.unknown;
+
+  Future<void> bootstrap() async {
+    final token =
+        await ref.read(secureStorageProvider).readAccessToken(TokenKeys.admin);
+    state = (token != null && token.isNotEmpty)
+        ? const SessionState(status: SessionStatus.authenticated)
+        : SessionState.unauthenticated;
+  }
+
+  /// Re-reads persisted tokens (called after a successful admin login).
+  Future<void> refresh() => bootstrap();
+
+  void markAuthenticated({String? email}) {
+    state = SessionState(status: SessionStatus.authenticated, email: email);
+  }
+
+  Future<void> logoutLocal() async {
+    await ref.read(secureStorageProvider).clearTokens(TokenKeys.admin);
+    state = SessionState.unauthenticated;
+  }
+}
+
+final adminSessionProvider =
+    NotifierProvider<AdminSessionNotifier, SessionState>(AdminSessionNotifier.new);
