@@ -8,10 +8,10 @@ import 'interceptors/logging_interceptor.dart';
 
 /// Base URL. Injected at build time:
 /// `flutter build apk --dart-define=API_BASE_URL=https://host/api/v1`.
-/// Defaults to the loopback dev endpoint (exempt from the HTTPS gate).
+/// Defaults to the live production backend.
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://127.0.0.1/hostphp/api/v1',
+  defaultValue: 'http://139.162.17.159/api/v1',
 );
 
 /// App version reported via `X-App-Version` (compared to `min_app_version`).
