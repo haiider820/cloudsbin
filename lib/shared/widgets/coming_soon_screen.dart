@@ -5,9 +5,10 @@ import '../../core/router/routes.dart';
 
 /// Placeholder for routes that arrive in a later phase.
 class ComingSoonScreen extends StatelessWidget {
-  const ComingSoonScreen({super.key, required this.title});
+  const ComingSoonScreen({super.key, required this.title, this.subtitle});
 
   final String title;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +28,10 @@ class ComingSoonScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              const Text('Coming soon.'),
+              Text(
+                subtitle ?? 'Coming soon.',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
               OutlinedButton(
                 onPressed: () => context.go(Routes.home),

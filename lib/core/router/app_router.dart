@@ -17,6 +17,20 @@ import '../../features/servers/presentation/server_detail_screen.dart';
 import '../../features/servers/presentation/server_list_screen.dart';
 import '../../features/servers/presentation/server_usage_screen.dart';
 import '../../features/servers/presentation/whitelist_screen.dart';
+import '../../features/ordering/presentation/create_server_screen.dart';
+import '../../features/ordering/presentation/crypto_checkout_screen.dart';
+import '../../features/ordering/presentation/crypto_order_status_screen.dart';
+import '../../features/ordering/presentation/estimate_screen.dart';
+import '../../features/ordering/presentation/orders_screen.dart';
+import '../../features/ordering/presentation/plans_screen.dart';
+import '../../features/ordering/presentation/receipt_upload_screen.dart';
+import '../../features/account/presentation/change_password_screen.dart';
+import '../../features/account/presentation/profile_screen.dart';
+import '../../features/account/presentation/sessions_screen.dart';
+import '../../features/account/presentation/settings_screen.dart';
+import '../../features/admin/presentation/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/admin_login_screen.dart';
+import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
 
 /// Single GoRouter instance with an auth-aware redirect.
@@ -28,6 +42,7 @@ import 'routes.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
   ref.listen<SessionState>(sessionProvider, (_, __) => refresh.value++);
+  ref.listen<SessionState>(adminSessionProvider, (_, __) => refresh.value++);
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
@@ -35,11 +50,27 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final status = ref.read(sessionProvider).status;
+      final adminStatus = ref.read(adminSessionProvider).status;
       final location = state.matchedLocation;
       final onAuthScreen = location == Routes.login ||
           location == Routes.register ||
           location == Routes.forgotPassword;
       final onSplash = location == Routes.splash;
+      final onAdmin = location.startsWith('/admin');
+
+      // Admin audience has its own auth state and redirect.
+      if (onAdmin) {
+        switch (adminStatus) {
+          case SessionStatus.unknown:
+            return Routes.adminLogin;
+          case SessionStatus.unauthenticated:
+            return location == Routes.adminLogin ? null : Routes.adminLogin;
+          case SessionStatus.authenticated:
+            return location == Routes.adminLogin
+                ? Routes.adminDashboard
+                : null;
+        }
+      }
 
       switch (status) {
         case SessionStatus.unknown:
@@ -122,6 +153,121 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.serverDestroy,
         builder: (context, state) => DestroyScreen(
           serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      // Ordering (Phase 8).
+      GoRoute(
+        path: Routes.plans,
+        builder: (context, state) => const PlansScreen(),
+      ),
+      GoRoute(
+        path: Routes.estimate,
+        builder: (context, state) => const EstimateScreen(),
+      ),
+      GoRoute(
+        path: Routes.createServer,
+        builder: (context, state) => CreateServerScreen(
+          initialPlanSlug: (state.extra is Map)
+              ? (state.extra as Map)['planSlug'] as String?
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: Routes.orders,
+        builder: (context, state) => const OrdersScreen(),
+      ),
+      GoRoute(
+        path: Routes.receiptUpload,
+        builder: (context, state) => const ReceiptUploadScreen(),
+      ),
+      // Crypto (Phase 9).
+      GoRoute(
+        path: Routes.cryptoCheckout,
+        builder: (context, state) => CryptoCheckoutScreen(
+          planSlug: (state.extra is Map)
+              ? (state.extra as Map)['planSlug'] as String?
+              : null,
+          region: (state.extra is Map)
+              ? (state.extra as Map)['region'] as String?
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: Routes.cryptoOrderStatus,
+        builder: (context, state) => CryptoOrderStatusScreen(
+          orderId: (state.extra is Map)
+              ? ((state.extra as Map)['orderId'] as String? ?? '')
+              : '',
+        ),
+      ),
+      // Account (Phase 10).
+      GoRoute(
+        path: Routes.profile,
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: Routes.sessions,
+        builder: (context, state) => const SessionsScreen(),
+      ),
+      GoRoute(
+        path: Routes.changePassword,
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: Routes.settings,
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      // Admin (Phase 11) — separate audience, separate auth state.
+      GoRoute(
+        path: Routes.adminLogin,
+        builder: (context, state) => const AdminLoginScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminDashboard,
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      // Phase 12 coming-soon stubs (no v1 endpoints yet).
+      GoRoute(
+        path: Routes.walletTopup,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Top up wallet',
+          subtitle: 'Manual top-up via bank transfer receipt is coming soon.',
+        ),
+      ),
+      GoRoute(
+        path: Routes.walletWithdraw,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Withdraw from wallet',
+          subtitle: 'Wallet withdrawals are coming soon.',
+        ),
+      ),
+      GoRoute(
+        path: Routes.walletHistory,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Wallet history',
+          subtitle: 'Transaction history is coming soon.',
+        ),
+      ),
+      GoRoute(
+        path: Routes.tickets,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Support tickets',
+          subtitle: 'Support tickets are coming soon.',
+        ),
+      ),
+      GoRoute(
+        path: Routes.notificationsList,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Notifications',
+          subtitle: 'Notifications are coming soon.',
+        ),
+      ),
+      GoRoute(
+        path: Routes.terminal,
+        builder: (context, state) => const ComingSoonScreen(
+          title: 'Terminal / desktop',
+          subtitle:
+              'Browser terminal access is not part of the v1 API. Use SSH with the credentials from the credentials screen.',
         ),
       ),
     ],

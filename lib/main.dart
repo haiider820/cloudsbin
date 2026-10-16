@@ -7,6 +7,7 @@ import 'core/api/api_client.dart';
 import 'core/demo/demo_adapter.dart';
 import 'core/demo/demo_mode.dart';
 import 'features/auth/data/auth_session.dart';
+import 'features/admin/data/admin_auth_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,13 +27,19 @@ Future<void> main() async {
   if (kDemoMode) {
     // Demo: serve sample data locally and skip the login gate so every built
     // screen can be explored without a backend.
-    container.read(apiClientProvider).dio.httpClientAdapter = DemoAdapter();
+    final demoAdapter = DemoAdapter();
+    container.read(apiClientProvider).dio.httpClientAdapter = demoAdapter;
+    container.read(adminApiClientProvider).dio.httpClientAdapter = demoAdapter;
     container
         .read(sessionProvider.notifier)
         .markAuthenticated(email: 'demo-user@cloudsbin.local');
+    container
+        .read(adminSessionProvider.notifier)
+        .markAuthenticated(email: 'demo-admin@cloudsbin.local');
   } else {
     // Real API: resolve the initial route from persisted tokens.
     await container.read(sessionProvider.notifier).bootstrap();
+    await container.read(adminSessionProvider.notifier).bootstrap();
   }
 
   runApp(
