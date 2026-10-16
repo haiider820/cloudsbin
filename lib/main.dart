@@ -4,6 +4,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app.dart';
 import 'core/api/api_client.dart';
+import 'core/demo/demo_adapter.dart';
+import 'core/demo/demo_mode.dart';
 import 'features/auth/data/auth_session.dart';
 
 Future<void> main() async {
@@ -21,8 +23,17 @@ Future<void> main() async {
     container.read(sessionProvider.notifier).logoutLocal();
   };
 
-  // Resolve the initial route before the first frame.
-  await container.read(sessionProvider.notifier).bootstrap();
+  if (kDemoMode) {
+    // Demo: serve sample data locally and skip the login gate so every built
+    // screen can be explored without a backend.
+    container.read(apiClientProvider).dio.httpClientAdapter = DemoAdapter();
+    container
+        .read(sessionProvider.notifier)
+        .markAuthenticated(email: 'demo-user@cloudsbin.local');
+  } else {
+    // Real API: resolve the initial route from persisted tokens.
+    await container.read(sessionProvider.notifier).bootstrap();
+  }
 
   runApp(
     UncontrolledProviderScope(
