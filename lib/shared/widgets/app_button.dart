@@ -98,7 +98,12 @@ class AppButton extends StatelessWidget {
   ButtonStyle? _style() {
     final height = dense ? 46.0 : 54.0;
     return ButtonStyle(
-      minimumSize: WidgetStatePropertyAll(Size.fromHeight(height)),
+      // Height-only minimum. Width must stay 0: a `Size.fromHeight` minimum
+      // has an infinite width, which asserts ("BoxConstraints forces an
+      // infinite width") whenever the button lands in an unbounded-width
+      // context such as a Row. Full-width stretching is done by the
+      // SizedBox wrapper in build(), not by minimumSize.
+      minimumSize: WidgetStatePropertyAll(Size(0, height)),
       shape: WidgetStatePropertyAll(
         RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
