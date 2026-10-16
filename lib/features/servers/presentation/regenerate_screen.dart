@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/app_dialog.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/reauth_sheet.dart';
 import '../data/server_repository.dart';
 
@@ -32,6 +35,18 @@ class _RegenerateScreenState extends ConsumerState<RegenerateScreen> {
   Future<void> _regenerate() async {
     final grant = await showReauthSheet(context);
     if (!mounted || grant == null) return;
+
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Regenerate password?',
+      message: 'The current password will be replaced. '
+          'You can reveal the new one right after.',
+      confirmLabel: 'Regenerate',
+      danger: true,
+      icon: Icons.autorenew,
+    );
+    if (!mounted || !confirmed) return;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -63,56 +78,42 @@ class _RegenerateScreenState extends ConsumerState<RegenerateScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Regenerate password')),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: _buildBody(context),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: _buildBody(context),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBody(BuildContext context) {
-    final theme = Theme.of(context);
     if (_busy) {
-      return const CircularProgressIndicator();
+      return const AppLoadingView(message: 'Regenerating password…');
     }
     if (_error != null) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, size: 56, color: theme.colorScheme.error),
-          const SizedBox(height: 16),
-          Text(_error!.userMessage, textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          FilledButton(onPressed: _regenerate, child: const Text('Try again')),
-        ],
+      return AppErrorView(
+        message: _error!.userMessage,
+        retryLabel: 'Try again',
+        onRetry: _regenerate,
       );
     }
     if (_message != null) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_outline, size: 56, color: theme.colorScheme.primary),
-          const SizedBox(height: 16),
-          Text(_message!, textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () =>
-                context.go(Routes.serverCredentialsPath(widget.serverId)),
-            child: const Text('Reveal new password'),
-          ),
-        ],
+      return AppEmptyState(
+        icon: Icons.check_circle_outline,
+        title: 'Password regenerated',
+        message: _message,
+        actionLabel: 'Reveal new password',
+        onAction: () =>
+            context.go(Routes.serverCredentialsPath(widget.serverId)),
       );
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.autorenew, size: 56, color: theme.colorScheme.outline),
-        const SizedBox(height: 16),
-        const Text('Confirmation required to regenerate the password.'),
-        const SizedBox(height: 24),
-        FilledButton(onPressed: _regenerate, child: const Text('Confirm password')),
-      ],
+    return AppEmptyState(
+      icon: Icons.autorenew,
+      title: 'Confirmation required to regenerate the password.',
+      actionLabel: 'Confirm password',
+      onAction: _regenerate,
     );
   }
 }

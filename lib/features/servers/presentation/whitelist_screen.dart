@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/date_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_dialog.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../data/models/ip_whitelist.dart';
 import '../data/server_repository.dart';
@@ -56,24 +64,15 @@ class _WhitelistScreenState extends ConsumerState<WhitelistScreen> {
   }
 
   Future<void> _remove(WhitelistIp ip) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove IP'),
-        content: Text('Remove ${ip.ipCidr ?? 'this rule'} from the whitelist?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Remove IP',
+      message: 'Remove ${ip.ipCidr ?? 'this rule'} from the whitelist?',
+      confirmLabel: 'Remove',
+      danger: true,
+      icon: Icons.delete_outline,
     );
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       await ref.read(serverRepositoryProvider).ipWhitelistRemove(
@@ -108,80 +107,138 @@ class _WhitelistScreenState extends ConsumerState<WhitelistScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading && _data == null && _error == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingView(message: 'Loading whitelist…');
     }
     if (_error != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
+      return AppErrorView(
         title: 'Could not load whitelist',
         message: _error!.userMessage,
-        action: FilledButton(onPressed: _load, child: const Text('Retry')),
+        retryLabel: 'Retry',
+        onRetry: _load,
       );
     }
     final data = _data;
     if (data == null) return const SizedBox.shrink();
 
     return RefreshIndicator(
+      color: AppColors.accent,
+      backgroundColor: AppColors.bg2,
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.lock_outline),
-              title: const Text('Access port'),
-              trailing: Text(
-                data.accessPort?.toString() ?? '—',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+          AppCard(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: const Icon(
+                    Icons.lock_outline,
+                    size: 20,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Expanded(
+                  child: Text(
+                    'Access port',
+                    style: AppTypography.title,
+                  ),
+                ),
+                Text(
+                  data.accessPort?.toString() ?? '—',
+                  style:
+                      AppTypography.mono.copyWith(fontSize: 16),
+                ),
+              ],
             ),
+          ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0),
+          const SizedBox(height: AppSpacing.lg),
+          const SectionHeader(
+            title: 'Whitelisted IPs',
+            icon: Icons.shield_outlined,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.sm),
           if (data.ips.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 48),
-              child: EmptyState(
-                icon: Icons.shield_outlined,
-                title: 'No whitelist entries',
-                message: 'Add an IP or CIDR to restrict access.',
-              ),
+            const AppEmptyState(
+              icon: Icons.shield_outlined,
+              title: 'No whitelist entries',
+              message: 'Add an IP or CIDR to restrict access.',
             )
           else
-            Card(
-              child: Column(
-                children: [
-                  for (final ip in data.ips) _IpTile(ip: ip, onRemove: _remove),
-                ],
-              ),
-            ),
+            for (final ip in data.ips) ...[
+              _IpCard(ip: ip, onRemove: _remove)
+                  .animate()
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.06, end: 0),
+              const SizedBox(height: AppSpacing.sm),
+            ],
         ],
       ),
     );
   }
 }
 
-class _IpTile extends StatelessWidget {
-  const _IpTile({required this.ip, required this.onRemove});
+class _IpCard extends StatelessWidget {
+  const _IpCard({required this.ip, required this.onRemove});
 
   final WhitelistIp ip;
   final void Function(WhitelistIp) onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = <String>[
-      if (ip.description != null && ip.description!.isNotEmpty) ip.description!,
+    final meta = <String>[
+      if (ip.description != null && ip.description!.isNotEmpty)
+        ip.description!,
       if (ip.port != null) 'port ${ip.port}',
       if (ip.createdAt != null)
         DateFormatter.isoToLocal(ip.createdAt!.toIso8601String()),
     ].join(' · ');
-    return ListTile(
-      leading: const Icon(Icons.language),
-      title: Text(ip.ipCidr ?? '—'),
-      subtitle: subtitle.isEmpty ? null : Text(subtitle),
-      trailing: IconButton(
-        tooltip: 'Remove',
-        icon: const Icon(Icons.delete_outline),
-        onPressed: () => onRemove(ip),
+    return AppCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: const Icon(
+              Icons.language,
+              size: 20,
+              color: AppColors.success,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ip.ipCidr ?? '—',
+                  style: AppTypography.mono,
+                ),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(meta, style: AppTypography.caption),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(
+              Icons.delete_outline,
+              color: AppColors.danger,
+            ),
+            onPressed: () => onRemove(ip),
+          ),
+        ],
       ),
     );
   }
@@ -230,7 +287,8 @@ class _AddIpDialogState extends ConsumerState<_AddIpDialog> {
       if (!mounted) return;
       if (e.code == 'INVALID_CIDR') {
         setState(() {
-          _cidrError = e.message.isNotEmpty ? e.message : 'Invalid IP or CIDR.';
+          _cidrError =
+              e.message.isNotEmpty ? e.message : 'Invalid IP or CIDR.';
           _submitting = false;
         });
       } else if (e.code == 'ALREADY_EXISTS') {
@@ -251,39 +309,42 @@ class _AddIpDialogState extends ConsumerState<_AddIpDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
+          AppTextField(
             controller: _cidrController,
-            autofocus: true,
+            label: 'IP or CIDR',
+            hint: '203.0.113.10/32',
             keyboardType: TextInputType.text,
-            decoration: InputDecoration(
-              labelText: 'IP or CIDR',
-              hintText: '203.0.113.10/32',
-              errorText: _cidrError,
-            ),
+            errorText: _cidrError,
           ),
-          const SizedBox(height: 12),
-          TextField(
+          const SizedBox(height: AppSpacing.sm),
+          AppTextField(
             controller: _labelController,
-            decoration: const InputDecoration(
-              labelText: 'Label (optional)',
-            ),
+            label: 'Label (optional)',
           ),
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Add'),
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Cancel',
+                variant: AppButtonVariant.secondary,
+                dense: true,
+                onPressed:
+                    _submitting ? null : () => Navigator.pop(context, false),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: AppButton(
+                label: 'Add',
+                dense: true,
+                loading: _submitting,
+                onPressed: _submitting ? null : _submit,
+              ),
+            ),
+          ],
         ),
       ],
     );

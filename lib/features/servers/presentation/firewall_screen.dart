@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/enums/app_enums.dart';
 import '../../../shared/utils/date_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_dialog.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../data/models/firewall.dart';
 import '../data/server_repository.dart';
@@ -57,27 +65,16 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
   }
 
   Future<void> _remove(FirewallRule rule) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove rule'),
-        content: Text(
-          'Remove ${rule.protocol?.raw ?? 'rule'} '
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Remove rule',
+      message: 'Remove ${rule.protocol?.raw ?? 'rule'} '
           '${rule.portStart ?? ''}${rule.portEnd != null && rule.portEnd != rule.portStart ? '-${rule.portEnd}' : ''}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Remove',
+      danger: true,
+      icon: Icons.delete_outline,
     );
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       await ref.read(serverRepositoryProvider).firewallRemove(
@@ -111,67 +108,107 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading && _data == null && _error == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingView(message: 'Loading firewall…');
     }
     if (_error != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
+      return AppErrorView(
         title: 'Could not load firewall',
         message: _error!.userMessage,
-        action: FilledButton(onPressed: _load, child: const Text('Retry')),
+        retryLabel: 'Retry',
+        onRetry: _load,
       );
     }
     final data = _data;
     if (data == null) return const SizedBox.shrink();
 
     return RefreshIndicator(
+      color: AppColors.accent,
+      backgroundColor: AppColors.bg2,
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.settings_ethernet),
-              title: const Text('Access port'),
-              subtitle: const Text('Rules covering this port are rejected'),
-              trailing: Text(
-                data.accessPort?.toString() ?? '—',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+          AppCard(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: const Icon(
+                    Icons.settings_ethernet,
+                    size: 20,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Access port',
+                        style: AppTypography.title,
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Rules covering this port are rejected',
+                        style: AppTypography.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  data.accessPort?.toString() ?? '—',
+                  style: AppTypography.mono.copyWith(fontSize: 16),
+                ),
+              ],
             ),
+          ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0),
+          const SizedBox(height: AppSpacing.lg),
+          const SectionHeader(
+            title: 'Inbound rules',
+            icon: Icons.local_fire_department_outlined,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.sm),
           if (data.rules.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 48),
-              child: EmptyState(
-                icon: Icons.local_fire_department_outlined,
-                title: 'No custom rules',
-                message: 'Only inbound rules can be managed.',
-              ),
+            const AppEmptyState(
+              icon: Icons.local_fire_department_outlined,
+              title: 'No custom rules',
+              message: 'Only inbound rules can be managed.',
             )
           else
-            Card(
-              child: Column(
-                children: [
-                  for (final rule in data.rules)
-                    _RuleTile(rule: rule, onRemove: _remove),
-                ],
-              ),
-            ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Icon(Icons.info_outline, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Outbound rules are not supported by the API '
-                  '(they are rejected with 400 DIRECTION_NOT_SUPPORTED).',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
+            for (final rule in data.rules) ...[
+              _RuleCard(rule: rule, onRemove: _remove)
+                  .animate()
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.06, end: 0),
+              const SizedBox(height: AppSpacing.sm),
             ],
+          const SizedBox(height: AppSpacing.sm),
+          AppCard(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    'Outbound rules are not supported by the API '
+                    '(they are rejected with 400 DIRECTION_NOT_SUPPORTED).',
+                    style: AppTypography.caption,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -179,8 +216,8 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
   }
 }
 
-class _RuleTile extends StatelessWidget {
-  const _RuleTile({required this.rule, required this.onRemove});
+class _RuleCard extends StatelessWidget {
+  const _RuleCard({required this.rule, required this.onRemove});
 
   final FirewallRule rule;
   final void Function(FirewallRule) onRemove;
@@ -192,7 +229,7 @@ class _RuleTile extends StatelessWidget {
         : (rule.portEnd != null && rule.portEnd != rule.portStart)
             ? '${rule.portStart}-${rule.portEnd}'
             : '${rule.portStart}';
-    final subtitle = <String>[
+    final meta = <String>[
       '${rule.direction?.raw ?? 'inbound'} · ${rule.protocol?.raw ?? 'tcp'} · port $portRange',
       if (rule.ipCidr != null && rule.ipCidr!.isNotEmpty) rule.ipCidr!,
       if (rule.description != null && rule.description!.isNotEmpty)
@@ -200,15 +237,46 @@ class _RuleTile extends StatelessWidget {
       if (rule.createdAt != null)
         DateFormatter.isoToLocal(rule.createdAt!.toIso8601String()),
     ].join('\n');
-    return ListTile(
-      leading: const Icon(Icons.rule),
-      title: Text('${rule.protocol?.raw.toUpperCase() ?? ''} $portRange'.trim()),
-      subtitle: Text(subtitle),
-      isThreeLine: true,
-      trailing: IconButton(
-        tooltip: 'Remove',
-        icon: const Icon(Icons.delete_outline),
-        onPressed: () => onRemove(rule),
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: const Icon(
+              Icons.rule,
+              size: 20,
+              color: AppColors.warning,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${rule.protocol?.raw.toUpperCase() ?? ''} $portRange'
+                      .trim(),
+                  style: AppTypography.mono,
+                ),
+                const SizedBox(height: 2),
+                Text(meta, style: AppTypography.caption),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(
+              Icons.delete_outline,
+              color: AppColors.danger,
+            ),
+            onPressed: () => onRemove(rule),
+          ),
+        ],
       ),
     );
   }
@@ -297,70 +365,70 @@ class _AddRuleDialogState extends ConsumerState<_AddRuleDialog> {
             if (_formError != null) ...[
               Text(
                 _formError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: const TextStyle(color: AppColors.danger),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.sm),
             ],
             DropdownButtonFormField<FirewallProtocol>(
               initialValue: _protocol,
               decoration: const InputDecoration(labelText: 'Protocol'),
               items: const [
-                DropdownMenuItem(value: FirewallProtocol.tcp, child: Text('TCP')),
-                DropdownMenuItem(value: FirewallProtocol.udp, child: Text('UDP')),
+                DropdownMenuItem(
+                    value: FirewallProtocol.tcp, child: Text('TCP')),
+                DropdownMenuItem(
+                    value: FirewallProtocol.udp, child: Text('UDP')),
               ],
               onChanged: (value) =>
                   setState(() => _protocol = value ?? FirewallProtocol.tcp),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: _portStartController,
+                    label: 'Port start',
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Port start',
-                      errorText: _portError,
-                    ),
+                    errorText: _portError,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: _portEndController,
+                    label: 'Port end',
+                    hint: 'optional',
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Port end',
-                      hintText: 'optional',
-                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
+            const SizedBox(height: AppSpacing.sm),
+            AppTextField(
               controller: _sourceController,
+              label: 'Source CIDR',
+              hint: '198.51.100.0/24',
               keyboardType: TextInputType.text,
-              decoration: InputDecoration(
-                labelText: 'Source CIDR',
-                hintText: '198.51.100.0/24',
-                errorText: _sourceError,
-              ),
+              errorText: _sourceError,
             ),
-            const SizedBox(height: 12),
-            TextField(
+            const SizedBox(height: AppSpacing.sm),
+            AppTextField(
               controller: _descriptionController,
-              decoration: const InputDecoration(labelText: 'Description (optional)'),
+              label: 'Description (optional)',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xs),
             Row(
               children: [
-                const Icon(Icons.lock_outline, size: 16),
-                const SizedBox(width: 8),
+                const Icon(
+                  Icons.lock_outline,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     'Direction: inbound (outbound is disabled)',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: AppTypography.caption,
                   ),
                 ),
               ],
@@ -369,19 +437,27 @@ class _AddRuleDialogState extends ConsumerState<_AddRuleDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Add'),
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Cancel',
+                variant: AppButtonVariant.secondary,
+                dense: true,
+                onPressed:
+                    _submitting ? null : () => Navigator.pop(context, false),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: AppButton(
+                label: 'Add',
+                dense: true,
+                loading: _submitting,
+                onPressed: _submitting ? null : _submit,
+              ),
+            ),
+          ],
         ),
       ],
     );

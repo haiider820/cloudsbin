@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_dialog.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/reauth_sheet.dart';
 import '../data/server_repository.dart';
 
@@ -37,9 +45,17 @@ class _DestroyScreenState extends ConsumerState<DestroyScreen> {
       setState(() => _awaiting = true);
       return;
     }
-    final confirmed = await _confirmIrreversible();
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Destroy this server?',
+      message: 'This cannot be undone. The provider instance will be '
+          'permanently deleted.',
+      confirmLabel: 'Destroy',
+      danger: true,
+      icon: Icons.warning_amber_rounded,
+    );
     if (!mounted) return;
-    if (confirmed != true) {
+    if (!confirmed) {
       setState(() => _awaiting = true);
       return;
     }
@@ -68,41 +84,13 @@ class _DestroyScreenState extends ConsumerState<DestroyScreen> {
     }
   }
 
-  Future<bool?> _confirmIrreversible() {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: Icon(Icons.warning_amber_rounded,
-            color: Theme.of(context).colorScheme.error),
-        title: const Text('Destroy this server?'),
-        content: const Text(
-          'This cannot be undone. The provider instance will be permanently '
-          'deleted.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Destroy'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Destroy server')),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: _buildBody(context),
         ),
       ),
@@ -110,66 +98,79 @@ class _DestroyScreenState extends ConsumerState<DestroyScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    final theme = Theme.of(context);
-    if (_busy) return const CircularProgressIndicator();
+    if (_busy) {
+      return const AppLoadingView(message: 'Destroying server…');
+    }
 
     if (_done) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_outline, size: 56, color: theme.colorScheme.primary),
-          const SizedBox(height: 16),
-          const Text('Server destroyed.', textAlign: TextAlign.center),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () => context.go(Routes.servers),
-            child: const Text('Back to servers'),
-          ),
-        ],
+      return AppEmptyState(
+        icon: Icons.check_circle_outline,
+        title: 'Server destroyed.',
+        actionLabel: 'Back to servers',
+        onAction: () => context.go(Routes.servers),
       );
     }
 
     if (_error != null) {
       // 409 CONFLICT = already destroyed (§6.22).
       final already = _error!.code == 'CONFLICT';
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, size: 56, color: theme.colorScheme.error),
-          const SizedBox(height: 16),
-          Text(
-            already ? 'Already destroyed.' : _error!.userMessage,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () => context.go(Routes.servers),
-            child: const Text('Back to servers'),
-          ),
-        ],
+      return AppErrorView(
+        message: already ? 'Already destroyed.' : _error!.userMessage,
+        retryLabel: 'Back to servers',
+        onRetry: () => context.go(Routes.servers),
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.delete_outline, size: 56, color: theme.colorScheme.error),
-        const SizedBox(height: 16),
-        Text(
-          _awaiting
-              ? 'Confirmation required to destroy this server.'
-              : 'Preparing…',
-          textAlign: TextAlign.center,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: AppColors.danger.withValues(alpha: 0.45),
         ),
-        const SizedBox(height: 24),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: theme.colorScheme.error,
-          ),
-          onPressed: _start,
-          child: const Text('Continue'),
+      ),
+      child: AppCard(
+        color: AppColors.dangerBg,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                size: 40,
+                color: AppColors.danger,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Text(
+              'Destroy this server?',
+              textAlign: TextAlign.center,
+              style: AppTypography.headline,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              _awaiting
+                  ? 'Confirmation required to destroy this server.'
+                  : 'Preparing…',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySecondary,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppButton(
+              label: 'Continue',
+              icon: Icons.delete_outline,
+              variant: AppButtonVariant.danger,
+              onPressed: _start,
+            ),
+          ],
         ),
-      ],
-    );
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0);
   }
 }

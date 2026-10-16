@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
-import '../../../shared/widgets/loading_button.dart';
 import '../data/server_repository.dart';
 
 /// Changes the server access port (§6.26). Queues an agent command.
@@ -101,58 +107,89 @@ class _AccessPortScreenState extends ConsumerState<AccessPortScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Access port')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.settings_ethernet),
-              title: const Text('Current port'),
-              trailing: _loadingCurrent
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _currentPort?.toString() ?? '—',
-                      style: theme.textTheme.titleMedium,
-                    ),
+          AppCard(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: const Icon(
+                    Icons.settings_ethernet,
+                    size: 20,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                const Expanded(
+                  child: Text(
+                    'Current port',
+                    style: AppTypography.title,
+                  ),
+                ),
+                _loadingCurrent
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _currentPort?.toString() ?? '—',
+                        style: AppTypography.mono.copyWith(fontSize: 16),
+                      ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
+          ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0),
+          const SizedBox(height: AppSpacing.lg),
+          AppTextField(
             controller: _portController,
+            label: 'New port',
+            hint: '1024 – 65535',
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'New port',
-              helperText: 'Allowed range 1024–65535; reserved ports are rejected.',
-              errorText: _portError,
-            ),
+            errorText: _portError,
+            onFieldSubmitted: (_) => _submit(),
           ),
-          const SizedBox(height: 24),
-          LoadingButton(
+          const SizedBox(height: AppSpacing.xs),
+          const Text(
+            'Allowed range 1024–65535; reserved ports are rejected.',
+            style: AppTypography.caption,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppButton(
+            label: 'Queue change',
+            icon: Icons.save_outlined,
             loading: _submitting,
             onPressed: _submit,
-            icon: const Icon(Icons.save_outlined),
-            child: const Text('Queue change'),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Icon(Icons.info_outline, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'The agent applies the change within a minute. '
-                  'Limited to 3 changes per server per day.',
-                  style: theme.textTheme.bodySmall,
+          const SizedBox(height: AppSpacing.md),
+          AppCard(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: AppColors.textMuted,
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    'The agent applies the change within a minute. '
+                    'Limited to 3 changes per server per day.',
+                    style: AppTypography.caption,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

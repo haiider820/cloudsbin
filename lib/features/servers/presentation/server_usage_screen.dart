@@ -1,12 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/byte_formatter.dart';
 import '../../../shared/utils/date_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../data/models/server_usage.dart';
 import '../data/server_repository.dart';
@@ -91,13 +97,15 @@ class _ServerUsageScreenState extends ConsumerState<ServerUsageScreen> {
       body: _buildBody(context),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: _loading || forced ? null : () => _load(force: true),
-            icon: const Icon(Icons.bolt),
-            label: Text(
-              forced ? 'Rate limited · ${_rateLimitRemaining}s' : 'Force refresh',
-            ),
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: AppButton(
+            label: forced
+                ? 'Rate limited · ${_rateLimitRemaining}s'
+                : 'Force refresh',
+            icon: Icons.bolt,
+            loading: _loading,
+            onPressed:
+                _loading || forced ? null : () => _load(force: true),
           ),
         ),
       ),
@@ -106,169 +114,157 @@ class _ServerUsageScreenState extends ConsumerState<ServerUsageScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading && _usage == null && _error == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingView(message: 'Fetching usage…');
     }
     if (_error != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
+      return AppErrorView(
         title: 'Usage unavailable',
         message: _error!.userMessage,
-        action: FilledButton(
-          onPressed: () => _load(),
-          child: const Text('Retry'),
-        ),
+        retryLabel: 'Retry',
+        onRetry: _load,
       );
     }
     final usage = _usage;
     if (usage == null) {
-      return const Center(child: Text('No data.'));
+      return const AppEmptyState(
+        icon: Icons.speed_outlined,
+        title: 'No usage data',
+        message: 'Bandwidth statistics have not been reported yet.',
+      );
     }
 
-    final theme = Theme.of(context);
     final usedFraction = (usage.limitBytes ?? 0) > 0
         ? ((usage.totalBytes ?? 0) / usage.limitBytes!).clamp(0.0, 1.0)
         : null;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+        SectionHeader(
+          title: 'Bandwidth',
+          icon: Icons.speed_outlined,
+          action: usage.cached == true
+              ? Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.bg3,
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: const Text(
+                    'cached',
+                    style: AppTypography.caption,
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: StatTile(
+                icon: Icons.arrow_downward,
+                label: 'In',
+                value: ByteFormatter.toGb(usage.bandwidthInBytes),
+                accentColor: AppColors.info,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: StatTile(
+                icon: Icons.arrow_upward,
+                label: 'Out',
+                value: ByteFormatter.toGb(usage.bandwidthOutBytes),
+                accentColor: AppColors.accentViolet,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: StatTile(
+                icon: Icons.swap_vert,
+                label: 'Total',
+                value: ByteFormatter.toGb(usage.totalBytes),
+                accentColor: AppColors.accent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (usedFraction != null)
+          AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text('Bandwidth', style: theme.textTheme.titleMedium),
+                    const Text(
+                      'Usage of limit',
+                      style: AppTypography.bodySecondary,
+                    ),
                     const Spacer(),
-                    if (usage.cached == true)
-                      const Chip(
-                        label: Text('cached'),
-                        visualDensity: VisualDensity.compact,
-                      ),
+                    Text(
+                      '${(usedFraction * 100).round()}%',
+                      style: AppTypography.mono,
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                _UsageBar(
-                  label: 'In',
-                  bytes: usage.bandwidthInBytes,
-                  fraction: usedFraction,
+                const SizedBox(height: AppSpacing.xs),
+                ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(AppRadius.pill),
+                  child: LinearProgressIndicator(
+                    value: usedFraction,
+                    minHeight: 8,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.bg3,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _UsageBar(
-                  label: 'Out',
-                  bytes: usage.bandwidthOutBytes,
-                  fraction: usedFraction,
-                ),
-                const SizedBox(height: 12),
-                _UsageBar(
-                  label: 'Total',
-                  bytes: usage.totalBytes,
-                  fraction: usedFraction,
-                  emphasize: true,
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${ByteFormatter.toGb(usage.totalBytes)} of '
+                  '${ByteFormatter.toGb(usage.limitBytes)}',
+                  style: AppTypography.caption,
                 ),
               ],
             ),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 300.ms)
+              .slideY(begin: 0.06, end: 0),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionHeader(
+          title: 'Details',
+          icon: Icons.info_outline,
         ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _KeyValue(
-                  label: 'Limit',
-                  value: ByteFormatter.toGb(usage.limitBytes),
-                ),
-                _KeyValue(
-                  label: 'Fetched at',
-                  value: usage.fetchedAt == null
-                      ? '—'
-                      : DateFormatter.isoToLocal(usage.fetchedAt!.toIso8601String()),
-                ),
-                _KeyValue(label: 'Server ID', value: usage.serverId?.toString()),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _UsageBar extends StatelessWidget {
-  const _UsageBar({
-    required this.label,
-    required this.bytes,
-    required this.fraction,
-    this.emphasize = false,
-  });
-
-  final String label;
-  final int? bytes;
-  final double? fraction;
-  final bool emphasize;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.outline,
-                fontWeight: emphasize ? FontWeight.bold : null,
+        const SizedBox(height: AppSpacing.sm),
+        AppCard(
+          child: Column(
+            children: [
+              InfoRow(
+                label: 'Limit',
+                value: ByteFormatter.toGb(usage.limitBytes),
               ),
-            ),
-            const Spacer(),
-            Text(
-              ByteFormatter.toGb(bytes),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: emphasize ? FontWeight.bold : null,
+              InfoRow(
+                label: 'Fetched at',
+                value: usage.fetchedAt == null
+                    ? '—'
+                    : DateFormatter.isoToLocal(
+                        usage.fetchedAt!.toIso8601String(),
+                      ),
               ),
-            ),
-          ],
-        ),
-        if (emphasize && fraction != null) ...[
-          const SizedBox(height: 6),
-          LinearProgressIndicator(value: fraction),
-        ],
-      ],
-    );
-  }
-}
-
-class _KeyValue extends StatelessWidget {
-  const _KeyValue({required this.label, required this.value});
-
-  final String label;
-  final String? value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.outline),
-            ),
+              InfoRow(
+                label: 'Server ID',
+                value: usage.serverId?.toString() ?? '—',
+                mono: true,
+              ),
+            ],
           ),
-          Expanded(child: Text(value ?? '—', style: theme.textTheme.bodyMedium)),
-        ],
-      ),
+        ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0),
+      ],
     );
   }
 }

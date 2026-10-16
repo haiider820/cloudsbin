@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../../../shared/widgets/reauth_sheet.dart';
 import '../data/models/credential_reveal.dart';
@@ -93,14 +100,17 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_busy) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingView(message: 'Revealing credentials…');
     }
     if (_error != null) {
-      return _ErrorView(
-        error: _error!,
-        onRetry: _reveal,
-        onRegenerate: () =>
-            context.go(Routes.serverRegeneratePath(widget.serverId)),
+      final error = _error!;
+      return AppErrorView(
+        message: error.userMessage,
+        retryLabel: error.code == 'NO_CREDENTIALS' ? 'Regenerate' : 'Retry',
+        onRetry: error.code == 'NO_CREDENTIALS'
+            ? () => context.go(
+                Routes.serverRegeneratePath(widget.serverId))
+            : _reveal,
       );
     }
     if (_credential != null) {
@@ -113,49 +123,15 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
             context.go(Routes.serverRegeneratePath(widget.serverId)),
       );
     }
-    return _ConfirmPrompt(
-      awaitingConfirm: _awaitingConfirm,
-      onConfirm: _reveal,
-    );
-  }
-}
-
-class _ConfirmPrompt extends StatelessWidget {
-  const _ConfirmPrompt({required this.awaitingConfirm, required this.onConfirm});
-
-  final bool awaitingConfirm;
-  final VoidCallback onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.lock_outline,
-              size: 56,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              awaitingConfirm
-                  ? 'Confirmation required to reveal credentials.'
-                  : 'Revealing credentials…',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onConfirm,
-              icon: const Icon(Icons.lock_open),
-              label: const Text('Confirm password'),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (_awaitingConfirm) {
+      return AppEmptyState(
+        icon: Icons.lock_outline,
+        title: 'Confirmation required to reveal credentials.',
+        actionLabel: 'Confirm password',
+        onAction: _reveal,
+      );
+    }
+    return const AppLoadingView(message: 'Revealing credentials…');
   }
 }
 
@@ -176,155 +152,98 @@ class _CredentialView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final value = credential.credential ?? '';
     final masked = obscure ? '••••••••••' : value;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Row(
-                  label: 'IP address',
-                  value: credential.ipAddress ?? '—',
-                  onCopy: credential.ipAddress == null
-                      ? null
-                      : () => onCopy('IP address', credential.ipAddress!),
-                ),
-                _Row(
-                  label: 'Auth type',
-                  value: credential.authType.raw,
-                ),
-                const Divider(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Password',
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(color: theme.colorScheme.outline),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            masked,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ],
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeader(
+                title: 'Server credentials',
+                icon: Icons.key_outlined,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              InfoRow(
+                label: 'IP address',
+                value: credential.ipAddress ?? '—',
+                mono: true,
+                trailing: credential.ipAddress == null
+                    ? null
+                    : IconButton(
+                        tooltip: 'Copy',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.copy,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                        onPressed: () =>
+                            onCopy('IP address', credential.ipAddress!),
                       ),
+              ),
+              InfoRow(
+                label: 'Auth type',
+                value: credential.authType.raw,
+              ),
+              const Divider(color: AppColors.line, height: AppSpacing.lg),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Password',
+                          style: AppTypography.bodySecondary,
+                        ),
+                        const SizedBox(height: AppSpacing.xxs),
+                        SelectableText(
+                          masked,
+                          style: AppTypography.mono.copyWith(fontSize: 16),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: obscure ? 'Show' : 'Hide',
-                      icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
-                      onPressed: onToggleObscure,
+                  ),
+                  IconButton(
+                    tooltip: obscure ? 'Show' : 'Hide',
+                    icon: Icon(
+                      obscure
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: AppColors.textMuted,
                     ),
-                    IconButton(
-                      tooltip: 'Copy',
-                      icon: const Icon(Icons.copy),
-                      onPressed: value.isEmpty ? null : () => onCopy('Password', value),
+                    onPressed: onToggleObscure,
+                  ),
+                  IconButton(
+                    tooltip: 'Copy',
+                    icon: const Icon(
+                      Icons.copy,
+                      color: AppColors.textMuted,
                     ),
-                  ],
-                ),
-              ],
-            ),
+                    onPressed: value.isEmpty
+                        ? null
+                        : () => onCopy('Password', value),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
+        )
+            .animate()
+            .fadeIn(duration: 300.ms)
+            .slideY(begin: 0.06, end: 0),
+        const SizedBox(height: AppSpacing.md),
+        AppButton(
+          label: 'Regenerate password',
+          icon: Icons.autorenew,
+          variant: AppButtonVariant.secondary,
           onPressed: onRegenerate,
-          icon: const Icon(Icons.autorenew),
-          label: const Text('Regenerate password'),
         ),
       ],
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({
-    required this.error,
-    required this.onRetry,
-    required this.onRegenerate,
-  });
-
-  final ApiError error;
-  final VoidCallback onRetry;
-  final VoidCallback onRegenerate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 56,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(error.userMessage, textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (error.code == 'NO_CREDENTIALS')
-                  FilledButton(
-                    onPressed: onRegenerate,
-                    child: const Text('Regenerate'),
-                  )
-                else
-                  FilledButton(onPressed: onRetry, child: const Text('Retry')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.value, this.onCopy});
-
-  final String label;
-  final String value;
-  final VoidCallback? onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.outline),
-            ),
-          ),
-          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
-          if (onCopy != null)
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.copy, size: 18),
-              onPressed: onCopy,
-            ),
-        ],
-      ),
     );
   }
 }

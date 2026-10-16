@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/date_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/error_snackbar.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../data/models/server_detail.dart';
 import '../data/server_repository.dart';
@@ -58,15 +64,13 @@ class _ServerDetailScreenState extends ConsumerState<ServerDetailScreen> {
         ],
       ),
       body: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => EmptyState(
-          icon: Icons.error_outline,
+        loading: () => const AppLoadingView(message: 'Loading server…'),
+        error: (error, _) => AppErrorView(
           title: 'Could not load server',
           message: error is ApiError ? error.userMessage : 'Unexpected error.',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(serverDetailProvider(widget.serverId)),
-            child: const Text('Retry'),
-          ),
+          retryLabel: 'Retry',
+          onRetry: () =>
+              ref.invalidate(serverDetailProvider(widget.serverId)),
         ),
         data: (server) => _DetailBody(server: server),
       ),
@@ -81,114 +85,176 @@ class _DetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final bandwidth = server.bandwidth;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        HeroHeader(
+          eyebrow: 'Server',
+          title: server.name?.isNotEmpty == true
+              ? server.name!
+              : 'Server #${server.id}',
+          subtitle: 'ID ${server.id}',
+          icon: Icons.dns_outlined,
+          trailing: StatusChip(status: server.status),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.xl,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppCard(
+                gradientBorder: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        server.name?.isNotEmpty == true
-                            ? server.name!
-                            : 'Server #${server.id}',
-                        style: theme.textTheme.titleLarge,
+                    const SectionHeader(
+                      title: 'Details',
+                      icon: Icons.info_outline,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    InfoRow(
+                      label: 'IP address',
+                      value: server.ipAddress?.isNotEmpty == true
+                          ? server.ipAddress!
+                          : '—',
+                      mono: true,
+                    ),
+                    InfoRow(
+                      label: 'Access port',
+                      value: server.accessPort?.toString() ?? '—',
+                      mono: true,
+                    ),
+                    InfoRow(
+                      label: 'Plan',
+                      value: server.planName?.isNotEmpty == true
+                          ? server.planName!
+                          : '—',
+                    ),
+                    InfoRow(
+                      label: 'Region',
+                      value: server.region?.isNotEmpty == true
+                          ? server.region!
+                          : '—',
+                    ),
+                    InfoRow(
+                      label: 'Operating system',
+                      value: server.os?.isNotEmpty == true
+                          ? server.os!
+                          : '—',
+                    ),
+                    InfoRow(label: 'Specs', value: _specs(server) ?? '—'),
+                    InfoRow(
+                      label: 'Created',
+                      value: DateFormatter.isoToLocal(
+                        server.createdAt?.toIso8601String(),
                       ),
                     ),
-                    StatusChip(status: server.status),
+                    InfoRow(
+                      label: 'Activated',
+                      value: DateFormatter.isoToLocal(
+                        server.activatedAt?.toIso8601String(),
+                      ),
+                    ),
+                    if (server.destroyedAt != null)
+                      InfoRow(
+                        label: 'Destroyed',
+                        value: DateFormatter.isoToLocal(
+                          server.destroyedAt?.toIso8601String(),
+                        ),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text('ID ${server.id}', style: theme.textTheme.bodySmall),
-                const Divider(height: 24),
-                _InfoRow(label: 'IP address', value: server.ipAddress ?? 'No IP'),
-                _InfoRow(label: 'Access port', value: server.accessPort?.toString()),
-                _InfoRow(label: 'Plan', value: server.planName),
-                _InfoRow(label: 'Region', value: server.region),
-                _InfoRow(label: 'Operating system', value: server.os),
-                _InfoRow(
-                  label: 'Specs',
-                  value: _specs(server),
-                ),
-                _InfoRow(
-                  label: 'Created',
-                  value: DateFormatter.isoToLocal(server.createdAt?.toIso8601String()),
-                ),
-                _InfoRow(
-                  label: 'Activated',
-                  value: DateFormatter.isoToLocal(server.activatedAt?.toIso8601String()),
-                ),
-                if (server.destroyedAt != null)
-                  _InfoRow(
-                    label: 'Destroyed',
-                    value: DateFormatter.isoToLocal(server.destroyedAt?.toIso8601String()),
+              )
+                  .animate()
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.06, end: 0),
+              if (!server.status.isActive) ...[
+                const SizedBox(height: AppSpacing.sm),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionHeader(
+                        title: 'Provisioning',
+                        icon: Icons.hourglass_bottom_outlined,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.pill),
+                        child: LinearProgressIndicator(
+                          value: ((server.progress ?? 0) / 100).clamp(0, 1),
+                          minHeight: 6,
+                          color: AppColors.accent,
+                          backgroundColor: AppColors.bg3,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '${server.stage ?? 'Working'}'
+                        '${server.progress != null ? ' · ${server.progress}%' : ''}'
+                        '${server.etaSeconds != null ? ' · ETA ~${DateFormatter.countdown(server.etaSeconds!)}' : ''}',
+                        style: AppTypography.caption,
+                      ),
+                    ],
                   ),
+                )
+                    .animate()
+                    .fadeIn(duration: 300.ms)
+                    .slideY(begin: 0.06, end: 0),
               ],
-            ),
-          ),
-        ),
-        if (!server.status.isActive) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Provisioning', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: ((server.progress ?? 0) / 100).clamp(0, 1),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${server.stage ?? 'Working'}'
-                    '${server.progress != null ? ' · ${server.progress}%' : ''}'
-                    '${server.etaSeconds != null ? ' · ETA ~${DateFormatter.countdown(server.etaSeconds!)}' : ''}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SectionHeader(
+                      title: 'Bandwidth',
+                      icon: Icons.speed_outlined,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    if (bandwidth == null)
+                      const Text(
+                        'No bandwidth data available yet.',
+                        style: AppTypography.caption,
+                      )
+                    else ...[
+                      InfoRow(label: 'In', value: _gb(bandwidth.inGb) ?? '—'),
+                      InfoRow(
+                        label: 'Out',
+                        value: _gb(bandwidth.outGb) ?? '—',
+                      ),
+                      InfoRow(
+                        label: 'Total',
+                        value: _gb(bandwidth.totalGb) ?? '—',
+                      ),
+                      InfoRow(
+                        label: 'Resets on day',
+                        value: bandwidth.resetDay?.toString() ?? '—',
+                      ),
+                    ],
+                  ],
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.06, end: 0),
+              const SizedBox(height: AppSpacing.lg),
+              const SectionHeader(
+                title: 'Manage',
+                icon: Icons.settings_outlined,
               ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Bandwidth', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 8),
-                if (bandwidth == null)
-                  Text(
-                    'No bandwidth data available yet.',
-                    style: theme.textTheme.bodySmall,
-                  )
-                else ...[
-                  _InfoRow(label: 'In', value: _gb(bandwidth.inGb)),
-                  _InfoRow(label: 'Out', value: _gb(bandwidth.outGb)),
-                  _InfoRow(label: 'Total', value: _gb(bandwidth.totalGb)),
-                  _InfoRow(
-                    label: 'Resets on day',
-                    value: bandwidth.resetDay?.toString(),
-                  ),
-                ],
-              ],
-            ),
+              const SizedBox(height: AppSpacing.sm),
+              _ActionsGrid(serverId: server.id),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        _ActionsGrid(serverId: server.id),
       ],
     );
   }
@@ -211,57 +277,115 @@ class _ActionsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = <(IconData, String, String)>[
-      (Icons.bar_chart, 'Usage', Routes.serverUsagePath(serverId)),
-      (Icons.shield_outlined, 'IP whitelist', Routes.serverWhitelistPath(serverId)),
-      (Icons.local_fire_department_outlined, 'Firewall', Routes.serverFirewallPath(serverId)),
-      (Icons.key_outlined, 'Credentials', Routes.serverCredentialsPath(serverId)),
-      (Icons.settings_ethernet, 'Access port', Routes.serverAccessPortPath(serverId)),
-      (Icons.delete_outline, 'Destroy', Routes.serverDestroyPath(serverId)),
-    ];
-    return Card(
-      child: Column(
-        children: [
-          for (final (icon, label, route) in items)
-            ListTile(
-              leading: Icon(icon),
-              title: Text(label),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.go(route),
-            ),
-        ],
+    final items = <_ActionItem>[
+      _ActionItem(
+        Icons.bar_chart_outlined,
+        'Usage',
+        Routes.serverUsagePath(serverId),
+        AppColors.accent,
       ),
+      _ActionItem(
+        Icons.key_outlined,
+        'Credentials',
+        Routes.serverCredentialsPath(serverId),
+        AppColors.accentViolet,
+      ),
+      _ActionItem(
+        Icons.shield_outlined,
+        'IP whitelist',
+        Routes.serverWhitelistPath(serverId),
+        AppColors.success,
+      ),
+      _ActionItem(
+        Icons.local_fire_department_outlined,
+        'Firewall',
+        Routes.serverFirewallPath(serverId),
+        AppColors.warning,
+      ),
+      _ActionItem(
+        Icons.settings_ethernet,
+        'Access port',
+        Routes.serverAccessPortPath(serverId),
+        AppColors.info,
+      ),
+      _ActionItem(
+        Icons.autorenew,
+        'Regenerate',
+        Routes.serverRegeneratePath(serverId),
+        AppColors.accentViolet,
+      ),
+      _ActionItem(
+        Icons.delete_outline,
+        'Destroy',
+        Routes.serverDestroyPath(serverId),
+        AppColors.danger,
+      ),
+    ];
+    return GridView.count(
+      crossAxisCount: 2,
+      mainAxisSpacing: AppSpacing.sm,
+      crossAxisSpacing: AppSpacing.sm,
+      childAspectRatio: 2.1,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        for (final item in items)
+          _ActionTile(
+            item: item,
+            onTap: () => context.go(item.route),
+          ),
+      ],
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+class _ActionItem {
+  const _ActionItem(this.icon, this.label, this.route, this.accentColor);
 
+  final IconData icon;
   final String label;
-  final String? value;
+  final String route;
+  final Color accentColor;
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({required this.item, required this.onTap});
+
+  final _ActionItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+        vertical: AppSpacing.sm,
+        horizontal: AppSpacing.md,
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.outline),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: item.accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
+            child: Icon(item.icon, size: 22, color: item.accentColor),
           ),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              (value == null || value!.isEmpty) ? '—' : value!,
-              style: theme.textTheme.bodyMedium,
+              item.label,
+              style: AppTypography.bodySecondary.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
+          ),
+          const Icon(
+            Icons.chevron_right,
+            size: 18,
+            color: AppColors.textMuted,
           ),
         ],
       ),
