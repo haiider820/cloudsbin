@@ -144,6 +144,59 @@ class DemoAdapter implements HttpClientAdapter {
     if (_ends(path, '/me') || _ends(path, '/admin/me')) return _ok(_user);
     if (_ends(path, '/home')) return _ok(_home);
 
+    // Ordering (Phase 8).
+    if (_ends(path, '/plans/list')) return _ok(_plansList);
+    if (_ends(path, '/regions/list')) return _ok(_regionsList);
+    if (_ends(path, '/images/list')) return _ok(_imagesList);
+    if (_ends(path, '/servers/create')) {
+      return _ok({
+        'id': 9206570,
+        'status': 'PROVISIONING',
+        'name': 'demo-server-6570',
+        'plan_slug': 'standard-1',
+        'region': 'us-east',
+        'region_slug': 'us-east',
+        'image': 'ubuntu-24.04',
+        'price_cents': 575,
+        'price_display': r'$5.75',
+      });
+    }
+    if (_ends(path, '/orders/list')) return _ok(_ordersList);
+    if (_ends(path, '/orders/receipt')) {
+      return _DemoResponse(201, {
+        'request_id': 4205,
+        'status': 'PENDING',
+      });
+    }
+
+    // Crypto (Phase 9).
+    if (_ends(path, '/crypto/assets')) return _ok(_cryptoAssets);
+    if (_ends(path, '/crypto/checkout')) {
+      return _ok({
+        'order_id': 'CRY-2026-000042',
+        'asset': 'BTC',
+        'chain': 'bitcoin',
+        'token_symbol': 'BTC',
+        'network_name': 'Bitcoin',
+        'wallet_address': 'bc1qdemodemo1234567890abcdef',
+        'amount_requested': '0.00008621',
+        'expires_in_sec': 1800,
+      });
+    }
+    if (_ends(path, '/crypto/order')) {
+      return _ok({
+        'order_id': 'CRY-2026-000042',
+        'asset': 'BTC',
+        'chain': 'bitcoin',
+        'token_symbol': 'BTC',
+        'network_name': 'Bitcoin',
+        'amount_requested': '0.00008621',
+        'status': 'PENDING',
+        'created_at': '2026-10-16 10:24:00',
+        'seconds_left': 1740,
+      });
+    }
+
     // Unknown endpoint in demo: explicit placeholder error.
     return _DemoResponse(404, {
       'error': 'Demo mode has no sample data for $method $path.',
@@ -183,6 +236,113 @@ class DemoAdapter implements HttpClientAdapter {
     },
     'unread_notifications': 1,
     'pending_topups': 0,
+  };
+
+  static const Map<String, dynamic> _plansList = {
+    'items': [
+      {
+        'slug': 'standard-1',
+        'name': 'Standard 1',
+        'display_name': 'Standard 1',
+        'vcpu': 1,
+        'ram_gb': 1.0,
+        'ssd_gb': 25,
+        'price_cents': 575,
+        'price_display': r'$5.75',
+        'autoscale_offered': false,
+        'regions': [
+          {'slug': 'us-east'},
+          {'slug': 'eu-west'},
+        ],
+      },
+      {
+        'slug': 'standard-2',
+        'name': 'Standard 2',
+        'display_name': 'Standard 2',
+        'vcpu': 2,
+        'ram_gb': 4.0,
+        'ssd_gb': 80,
+        'price_cents': 2400,
+        'price_display': r'$24.00',
+        'autoscale_offered': false,
+        'regions': [
+          {'slug': 'us-east'},
+        ],
+      },
+    ],
+    'usd_pkr_rate': 282.5,
+    'page': 1,
+    'per_page': 20,
+    'total': 2,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _regionsList = {
+    'items': [
+      {'slug': 'us-east', 'display_name': 'US East'},
+      {'slug': 'eu-west', 'display_name': 'EU West'},
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 2,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _imagesList = {
+    'default': 'ubuntu-24.04',
+    'images': [
+      {'slug': 'ubuntu-24.04', 'name': 'Ubuntu 24.04 LTS'},
+      {'slug': 'debian-12', 'name': 'Debian 12'},
+    ],
+  };
+
+  static const Map<String, dynamic> _ordersList = {
+    'items': [
+      {
+        'id': 4205,
+        'status': 'PENDING',
+        'plan_slug': 'standard-1',
+        'plan_name': 'Standard 1',
+        'total_cents': 575,
+        'region': 'us-east',
+        'has_receipt': false,
+        'created_at': '2026-10-16T10:24:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 1,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _cryptoAssets = {
+    'network': 'mainnet',
+    'is_testnet': false,
+    'assets': [
+      {
+        'asset': 'BTC',
+        'chain': 'bitcoin',
+        'label': 'Bitcoin',
+        'symbol': 'BTC',
+        'network': 'bitcoin',
+        'network_name': 'Bitcoin',
+        'confirmations_required': 1,
+      },
+      {
+        'asset': 'USDT',
+        'chain': 'trc20',
+        'label': 'Tether (TRC-20)',
+        'symbol': 'USDT',
+        'network': 'tron',
+        'network_name': 'Tron',
+        'confirmations_required': 20,
+      },
+    ],
+    'btc_rate': {
+      'rate': 67234.50,
+      'updated_at': '2026-10-16 10:20:00',
+      'age_sec': 240,
+    },
   };
 
   static const Map<String, dynamic> _serversList = {
