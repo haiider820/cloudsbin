@@ -8,6 +8,8 @@ import '../../../shared/models/paged.dart';
 import 'models/credential_reveal.dart';
 import 'models/firewall.dart';
 import 'models/ip_whitelist.dart';
+import 'models/power_action.dart';
+import 'models/power_response.dart';
 import 'models/regenerate_result.dart';
 import 'models/server_actions.dart';
 import 'models/server_detail.dart';
@@ -111,6 +113,25 @@ class ServerRepository {
         data: {'server_id': serverId, 'port': port},
       );
       return AccessPortResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/power` — stop / start / reboot. Plain user Bearer: no
+  /// `X-Reauth-Token` (not an irreversible destroy) and no idempotency key
+  /// (not a money operation). Rate 5/300s per server; 429 carries
+  /// `Retry-After`, normalised into [ApiError.retryAfterSeconds].
+  Future<PowerResponse> powerAction({
+    required int serverId,
+    required PowerAction action,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/power',
+        data: {'server_id': serverId, 'action': action.name},
+      );
+      return PowerResponse.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

@@ -15,6 +15,12 @@ class DemoAdapter implements HttpClientAdapter {
 
   final Duration latency;
 
+  /// Live status of the sample server. Power actions move it
+  /// (stop→stopping, start→booting, reboot→rebooting); a 3-second timer puts
+  /// it back to `active` so the demo loop keeps working.
+  String _demoStatus = 'active';
+  Timer? _demoStatusTimer;
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -36,10 +42,13 @@ class DemoAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close({bool force = false}) {}
+  void close({bool force = false}) {
+    _demoStatusTimer?.cancel();
+  }
 
   _DemoResponse _route(String method, String path, RequestOptions options) {
     // Server sub-resources first (more specific paths).
+    if (_ends(path, '/servers/power')) return _power(options);
     if (_ends(path, '/servers/ip-whitelist')) return _ok(_ipWhitelist);
     if (_ends(path, '/servers/ip-whitelist-add')) {
       return _ok({
@@ -84,7 +93,9 @@ class DemoAdapter implements HttpClientAdapter {
       final id = int.tryParse('${options.queryParameters['id']}') ?? 9206568;
       return _ok(_detail(id));
     }
-    if (_ends(path, '/servers/refresh')) return _ok(_refresh);
+    if (_ends(path, '/servers/refresh')) {
+      return _ok({..._refresh, 'status': _demoStatus});
+    }
     if (_ends(path, '/servers/credentials-reveal')) {
       return _ok({
         'auth_type': 'password',
@@ -98,7 +109,7 @@ class DemoAdapter implements HttpClientAdapter {
         'message': 'A new root password was generated. Reveal it to see the value.',
       });
     }
-    if (_ends(path, '/servers/list')) return _ok(_serversList);
+    if (_ends(path, '/servers/list')) return _ok(_serversListUpdated());
     if (_ends(path, '/servers/estimate')) {
       return _ok({
         'price_cents': 575,
@@ -208,6 +219,44 @@ class DemoAdapter implements HttpClientAdapter {
   static bool _ends(String path, String suffix) => path.endsWith(suffix);
 
   static _DemoResponse _ok(Map<String, dynamic> body) => _DemoResponse(200, body);
+
+  /// `POST /servers/power` — echoes the action and moves the demo status,
+  /// then a 3-second timer transitions it back to `active`.
+  _DemoResponse _power(RequestOptions options) {
+    final body = options.data is Map
+        ? (options.data as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final action = body['action']?.toString() ?? '';
+    final serverId = (body['server_id'] as num?)?.toInt() ?? 9206568;
+    final status = switch (action) {
+      'stop' => 'stopping',
+      'start' => 'booting',
+      'reboot' => 'rebooting',
+      _ => null,
+    };
+    if (status == null) {
+      return _DemoResponse(400, {
+        'error': 'action must be one of: stop, start, reboot.',
+        'code': 'INVALID_ACTION',
+        'request_id': '00000000demo0000',
+      });
+    }
+    _demoStatus = status;
+    _demoStatusTimer?.cancel();
+    _demoStatusTimer = Timer(const Duration(seconds: 3), () {
+      _demoStatus = 'active';
+    });
+    return _ok({'action': action, 'status': status, 'server_id': serverId});
+  }
+
+  /// The sample list with the first (live) server carrying [_demoStatus].
+  Map<String, dynamic> _serversListUpdated() {
+    final items = (_serversList['items'] as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    items.first['status'] = _demoStatus;
+    return {..._serversList, 'items': items};
+  }
 
   // ---- Sample payloads -----------------------------------------------------
 
@@ -411,10 +460,10 @@ class DemoAdapter implements HttpClientAdapter {
     'has_more': false,
   };
 
-  static Map<String, dynamic> _detail(int id) => {
+  Map<String, dynamic> _detail(int id) => {
         'id': id,
         'name': 'demo-active',
-        'status': 'active',
+        'status': _demoStatus,
         'ip_address': '203.0.113.10',
         'access_port': 22,
         'plan_name': 'nano',

@@ -16,6 +16,12 @@ void showInfoSnackBar(BuildContext context, String message) {
   _show(context, message, isError: false);
 }
 
+/// Error-styled message for callers that compose their own copy (e.g. the
+/// power-action 429 countdown) instead of a full [ApiError].
+void showErrorMessageSnackBar(BuildContext context, String message) {
+  _show(context, message, isError: true);
+}
+
 void _show(BuildContext context, String message, {required bool isError}) {
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;

@@ -8,14 +8,19 @@ import '../../../core/router/routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/enums/app_enums.dart';
 import '../../../shared/utils/date_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_dialog.dart';
 import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../../../shared/widgets/hero_header.dart';
 import '../../../shared/widgets/status_chip.dart';
+import '../data/models/power_action.dart';
 import '../data/models/server_detail.dart';
 import '../data/server_repository.dart';
+import 'power_action_notifier.dart';
 
 class ServerDetailScreen extends ConsumerStatefulWidget {
   const ServerDetailScreen({super.key, required this.serverId});
@@ -78,14 +83,18 @@ class _ServerDetailScreenState extends ConsumerState<ServerDetailScreen> {
   }
 }
 
-class _DetailBody extends StatelessWidget {
+class _DetailBody extends ConsumerWidget {
   const _DetailBody({required this.server});
 
   final ServerDetail server;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bandwidth = server.bandwidth;
+    // Local optimistic power status (stopping/booting/rebooting) wins until
+    // the scheduled detail refresh lands the provider's real status.
+    final status =
+        ref.watch(serverStatusOverrideProvider(server.id)) ?? server.status;
 
     return ListView(
       children: [
@@ -96,7 +105,7 @@ class _DetailBody extends StatelessWidget {
               : 'Server #${server.id}',
           subtitle: 'ID ${server.id}',
           icon: Icons.dns_outlined,
-          trailing: StatusChip(status: server.status),
+          trailing: StatusChip(status: status),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -252,6 +261,8 @@ class _DetailBody extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               _ActionsGrid(serverId: server.id),
+              const SizedBox(height: AppSpacing.sm),
+              _PowerCard(serverId: server.id, status: status),
             ],
           ),
         ),
@@ -390,5 +401,159 @@ class _ActionTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Stop / Start / Reboot controls backed by `POST /servers/power`.
+class _PowerCard extends ConsumerWidget {
+  const _PowerCard({required this.serverId, required this.status});
+
+  final int serverId;
+  final ServerStatus status;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // A destroyed server has no provider instance left to power-manage.
+    if (status.isDestroyed) return const SizedBox.shrink();
+
+    final power = ref.watch(powerActionProvider(serverId));
+    final busy = power.isLoading;
+
+    // Enablement rules per current status; transitional states label the card.
+    final (bool stopEnabled, bool startEnabled, bool rebootEnabled,
+        String? transition) = switch (status.raw) {
+      'active' => (true, false, true, null),
+      'stopped' => (false, true, false, null),
+      'stopping' => (false, false, false, 'Stopping...'),
+      'booting' => (false, false, false, 'Starting...'),
+      'rebooting' => (false, false, false, 'Rebooting...'),
+      _ => (false, false, false, null),
+    };
+
+    // 409 conflicts show inline — they never change the local status.
+    final inlineError = power.isError &&
+            (power.error!.code == 'SERVER_NOT_ACTIVE' ||
+                power.error!.code == 'SERVER_NOT_STOPPED')
+        ? power.error!.message
+        : null;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Power', icon: Icons.power_settings_new),
+          if (transition != null || inlineError != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            if (transition != null)
+              Text(
+                transition,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            if (inlineError != null) ...[
+              if (transition != null) const SizedBox(height: AppSpacing.xs),
+              Text(
+                inlineError,
+                style: AppTypography.caption.copyWith(color: AppColors.danger),
+              ),
+            ],
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  label: 'Stop',
+                  icon: Icons.stop_circle_outlined,
+                  variant: AppButtonVariant.danger,
+                  dense: true,
+                  loading: power.isLoadingAction(PowerAction.stop),
+                  onPressed: (!stopEnabled || busy)
+                      ? null
+                      : () => _run(context, ref, PowerAction.stop),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppButton(
+                  label: 'Start',
+                  icon: Icons.play_circle_outlined,
+                  variant: AppButtonVariant.primary,
+                  dense: true,
+                  loading: power.isLoadingAction(PowerAction.start),
+                  onPressed: (!startEnabled || busy)
+                      ? null
+                      : () => _run(context, ref, PowerAction.start),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppButton(
+                  label: 'Reboot',
+                  icon: Icons.restart_alt_outlined,
+                  variant: AppButtonVariant.secondary,
+                  dense: true,
+                  loading: power.isLoadingAction(PowerAction.reboot),
+                  onPressed: (!rebootEnabled || busy)
+                      ? null
+                      : () => _run(context, ref, PowerAction.reboot),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    PowerAction action,
+  ) async {
+    // Confirmation before the destructive calls; Start is non-destructive.
+    if (action == PowerAction.stop) {
+      final confirmed = await confirmDialog(
+        context,
+        title: 'Stop server?',
+        message: 'It will become unreachable until started again.',
+        confirmLabel: 'Stop Server',
+        cancelLabel: 'Cancel',
+        danger: true,
+        icon: Icons.stop_circle_outlined,
+      );
+      if (!confirmed || !context.mounted) return;
+    } else if (action == PowerAction.reboot) {
+      final confirmed = await confirmDialog(
+        context,
+        title: 'Reboot server?',
+        message: 'It will be briefly unreachable.',
+        confirmLabel: 'Reboot',
+        cancelLabel: 'Cancel',
+        icon: Icons.restart_alt_outlined,
+      );
+      if (!confirmed || !context.mounted) return;
+    }
+
+    final state =
+        await ref.read(powerActionProvider(serverId).notifier).perform(action);
+    if (!state.isError || !context.mounted) return;
+
+    final error = state.error!;
+    switch (error.code) {
+      case 'RATE_LIMITED':
+        // 5/300s per server; countdown straight from Retry-After.
+        showErrorMessageSnackBar(context,
+            'Too many power actions. Wait ${error.retryAfterSeconds ?? 300}s.');
+      case 'PROVIDER_ERROR':
+        showErrorMessageSnackBar(
+            context, 'Provider unreachable. Try again shortly.');
+      case 'SERVER_NOT_ACTIVE':
+      case 'SERVER_NOT_STOPPED':
+        showErrorMessageSnackBar(context, error.message);
+      default:
+        showErrorSnackBar(context, error);
+    }
   }
 }

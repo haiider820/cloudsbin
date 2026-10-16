@@ -10,6 +10,9 @@ class ServerStatus {
 
   static const ServerStatus provisioning = ServerStatus._('provisioning');
   static const ServerStatus booting = ServerStatus._('booting');
+  static const ServerStatus stopped = ServerStatus._('stopped');
+  static const ServerStatus stopping = ServerStatus._('stopping');
+  static const ServerStatus rebooting = ServerStatus._('rebooting');
   static const ServerStatus active = ServerStatus._('active');
   static const ServerStatus destroyed = ServerStatus._('destroyed');
   static const ServerStatus passwordPending = ServerStatus._('password_pending');
@@ -21,6 +24,9 @@ class ServerStatus {
   static const List<ServerStatus> known = [
     provisioning,
     booting,
+    stopped,
+    stopping,
+    rebooting,
     active,
     destroyed,
     passwordPending,
