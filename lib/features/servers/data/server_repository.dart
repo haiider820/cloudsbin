@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../shared/enums/app_enums.dart';
 import '../../../shared/models/paged.dart';
+import 'models/credential_reveal.dart';
+import 'models/regenerate_result.dart';
 import 'models/server_detail.dart';
 import 'models/server_refresh_result.dart';
 import 'models/server_summary.dart';
@@ -50,6 +53,42 @@ class ServerRepository {
         data: {'server_id': serverId},
       );
       return ServerRefreshResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// Reveals stored credentials. Requires a fresh single-use re-auth grant
+  /// passed as `X-Reauth-Token` (§6.20). The grant is supplied per-call only.
+  Future<CredentialReveal> credentialsReveal({
+    required int serverId,
+    required String reauthToken,
+    AuthType authType = AuthType.password,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/credentials-reveal',
+        data: {'server_id': serverId, 'auth_type': authType.raw},
+        options: Options(headers: {'X-Reauth-Token': reauthToken}),
+      );
+      return CredentialReveal.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// Rotates the root password (§6.21). Requires a re-auth grant.
+  Future<RegenerateResult> credentialsRegenerate({
+    required int serverId,
+    required String reauthToken,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/credentials-regenerate',
+        data: {'server_id': serverId},
+        options: Options(headers: {'X-Reauth-Token': reauthToken}),
+      );
+      return RegenerateResult.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

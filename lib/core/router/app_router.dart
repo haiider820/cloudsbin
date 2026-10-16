@@ -8,6 +8,8 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/servers/presentation/credentials_screen.dart';
+import '../../features/servers/presentation/regenerate_screen.dart';
 import '../../features/servers/presentation/server_detail_screen.dart';
 import '../../features/servers/presentation/server_list_screen.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
@@ -79,8 +81,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       _comingSoon(Routes.serverUsage, 'Server usage'),
       _comingSoon(Routes.serverWhitelist, 'IP whitelist'),
       _comingSoon(Routes.serverFirewall, 'Firewall'),
-      _comingSoon(Routes.serverCredentials, 'Credentials'),
-      _comingSoon(Routes.serverRegenerate, 'Regenerate credentials'),
+      GoRoute(
+        path: Routes.serverCredentials,
+        builder: (context, state) => CredentialsScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: Routes.serverRegenerate,
+        builder: (context, state) => RegenerateScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
       _comingSoon(Routes.serverAccessPort, 'Access port'),
       _comingSoon(Routes.serverDestroy, 'Destroy server'),
     ],
