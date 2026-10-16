@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/demo/demo_mode.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/money_formatter.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_dialog.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/data/auth_session.dart';
 import '../data/home_repository.dart';
@@ -37,6 +45,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    final confirm = await confirmDialog(
+      context,
+      title: 'Log out?',
+      message: 'You will be signed out on this device.',
+      confirmLabel: 'Log out',
+      icon: Icons.logout_outlined,
+    );
+    if (confirm != true) return;
     try {
       await ref.read(authRepositoryProvider).logout();
     } catch (_) {
@@ -47,6 +63,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final email = ref.watch(sessionProvider).email;
+    final actions = <_ActionData>[
+      _ActionData(
+        Icons.add_circle_outline,
+        'Create server',
+        'Provision a new cloud server',
+        () => context.push(Routes.createServer),
+      ),
+      _ActionData(
+        Icons.dns_outlined,
+        'Servers',
+        'View and manage your servers',
+        () => context.push(Routes.servers),
+      ),
+      _ActionData(
+        Icons.inventory_2_outlined,
+        'Plans & ordering',
+        'Browse plans, estimate, create a server',
+        () => context.push(Routes.plans),
+      ),
+      _ActionData(
+        Icons.currency_bitcoin,
+        'Pay with crypto',
+        'Checkout with a crypto asset',
+        () => context.push(Routes.cryptoCheckout),
+      ),
+      _ActionData(
+        Icons.receipt_long_outlined,
+        'Orders',
+        'Order history and receipts',
+        () => context.push(Routes.orders),
+      ),
+      _ActionData(
+        Icons.person_outline,
+        'Profile',
+        'Account details and referral code',
+        () => context.push(Routes.profile),
+      ),
+      _ActionData(
+        Icons.devices_outlined,
+        'Sessions',
+        'Devices signed in to your account',
+        () => context.push(Routes.sessions),
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('CloudsBin'),
@@ -66,125 +128,154 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
             if (kDemoMode) const _DemoBanner(),
-            FutureBuilder<HomeSummary>(
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                if (snapshot.hasError) {
-                  final err = snapshot.error;
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(err is ApiError
-                                ? err.userMessage
-                                : 'Could not load the dashboard.'),
-                          ),
-                          TextButton(
-                            onPressed: _refresh,
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                return _Dashboard(summary: snapshot.data!);
-              },
+            HeroHeader(
+              eyebrow: 'CloudsBin',
+              title: 'Welcome back',
+              subtitle: email,
             ),
-            const SizedBox(height: 16),
-            _NavCard(
-              icon: Icons.dns_outlined,
-              title: 'Servers',
-              subtitle: 'View and manage your servers',
-              onTap: () => context.push(Routes.servers),
-            ),
-            _NavCard(
-              icon: Icons.inventory_2_outlined,
-              title: 'Plans & ordering',
-              subtitle: 'Browse plans, estimate, create a server',
-              onTap: () => context.push(Routes.plans),
-            ),
-            _NavCard(
-              icon: Icons.currency_bitcoin,
-              title: 'Pay with crypto',
-              subtitle: 'Checkout with a crypto asset',
-              onTap: () => context.push(Routes.cryptoCheckout),
-            ),
-            _NavCard(
-              icon: Icons.receipt_long_outlined,
-              title: 'Orders',
-              subtitle: 'Order history and receipts',
-              onTap: () => context.push(Routes.orders),
-            ),
-            _NavCard(
-              icon: Icons.person_outline,
-              title: 'Profile',
-              subtitle: 'Account details and referral code',
-              onTap: () => context.push(Routes.profile),
-            ),
-            _NavCard(
-              icon: Icons.devices_outlined,
-              title: 'Sessions',
-              subtitle: 'Devices signed in to your account',
-              onTap: () => context.push(Routes.sessions),
-            ),
-            if (kDemoMode) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Demo shortcuts (server #9206568)',
-                style: Theme.of(context).textTheme.titleSmall,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md),
+              child: FutureBuilder<HomeSummary>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Padding(
+                      padding:
+                          EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                      child: AppLoadingView(
+                          message: 'Loading dashboard…'),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    final err = snapshot.error;
+                    return AppErrorView(
+                      message: err is ApiError
+                          ? err.userMessage
+                          : 'Could not load the dashboard.',
+                      onRetry: _refresh,
+                    );
+                  }
+                  return _Dashboard(summary: snapshot.data!);
+                },
               ),
-              const SizedBox(height: 8),
-              Card(
-                child: Column(
-                  children: [
-                    _demoTile(context, Icons.info_outline, 'Server detail',
-                        Routes.serverDetailPath(9206568)),
-                    _demoTile(context, Icons.bar_chart, 'Usage',
-                        Routes.serverUsagePath(9206568)),
-                    _demoTile(context, Icons.shield_outlined, 'IP whitelist',
-                        Routes.serverWhitelistPath(9206568)),
-                    _demoTile(context,
-                        Icons.local_fire_department_outlined, 'Firewall',
-                        Routes.serverFirewallPath(9206568)),
-                    _demoTile(context, Icons.key_outlined, 'Credentials',
-                        Routes.serverCredentialsPath(9206568)),
-                    _demoTile(context, Icons.settings_ethernet, 'Access port',
-                        Routes.serverAccessPortPath(9206568)),
-                    _demoTile(context, Icons.delete_outline, 'Destroy',
-                        Routes.serverDestroyPath(9206568)),
-                  ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const Padding(
+              padding:
+                  EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: SectionHeader(
+                title: 'Quick actions',
+                subtitle: 'Jump to the things you do most',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (var i = 0; i < actions.length; i++)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                ),
+                child: _QuickAction(
+                  icon: actions[i].icon,
+                  title: actions[i].title,
+                  subtitle: actions[i].subtitle,
+                  onTap: actions[i].onTap,
+                  delay: i * 40,
+                ),
+              ),
+            if (kDemoMode) ...[
+              const SizedBox(height: AppSpacing.sm),
+              const Padding(
+                padding:
+                    EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: SectionHeader(
+                  title: 'Demo shortcuts',
+                  subtitle: 'Server #9206568',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md),
+                child: AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _demoTile(context, Icons.info_outline,
+                          'Server detail',
+                          Routes.serverDetailPath(9206568)),
+                      _demoTile(context, Icons.bar_chart, 'Usage',
+                          Routes.serverUsagePath(9206568)),
+                      _demoTile(context, Icons.shield_outlined,
+                          'IP whitelist',
+                          Routes.serverWhitelistPath(9206568)),
+                      _demoTile(
+                          context,
+                          Icons.local_fire_department_outlined,
+                          'Firewall',
+                          Routes.serverFirewallPath(9206568)),
+                      _demoTile(context, Icons.key_outlined,
+                          'Credentials',
+                          Routes.serverCredentialsPath(9206568)),
+                      _demoTile(
+                          context,
+                          Icons.settings_ethernet,
+                          'Access port',
+                          Routes.serverAccessPortPath(9206568)),
+                      _demoTile(context, Icons.delete_outline,
+                          'Destroy',
+                          Routes.serverDestroyPath(9206568),
+                          last: true),
+                    ],
+                  ),
                 ),
               ),
             ],
+            const SizedBox(height: AppSpacing.xxl),
           ],
         ),
       ),
     );
   }
 
-  ListTile _demoTile(
-      BuildContext context, IconData icon, String title, String route) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push(route),
+  Widget _demoTile(
+      BuildContext context, IconData icon, String title, String route,
+      {bool last = false}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: Icon(icon, color: AppColors.textSecondary),
+          title: Text(title, style: AppTypography.body),
+          trailing:
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+          onTap: () => context.push(route),
+        ),
+        if (!last)
+          const Divider(
+            color: AppColors.line,
+            height: 1,
+            indent: 56,
+          ),
+      ],
     );
   }
+}
+
+class _ActionData {
+  const _ActionData(this.icon, this.title, this.subtitle, this.onTap);
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 }
 
 class _Dashboard extends StatelessWidget {
@@ -194,168 +285,195 @@ class _Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final s = summary.servers;
-    final w = summary.wallet;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Wallet', style: theme.textTheme.titleSmall),
-                    const Spacer(),
-                    if ((summary.pendingTopups ?? 0) > 0)
-                      _Badge(
-                          label: '${summary.pendingTopups} pending top-up(s)',
-                          color: Colors.amber.shade800),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  MoneyFormatter.usdString(w.availableUsd),
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Pending ${MoneyFormatter.usdString(w.pendingUsd)}'
-                  ' · Lifetime ${MoneyFormatter.usdString(w.lifetimeEarnedUsd)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
+        _WalletCard(summary: summary),
+        const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             Expanded(
-                child: _CountTile(
-                    label: 'Total', value: s.total, icon: Icons.dns_outlined)),
-            const SizedBox(width: 12),
+              child: StatTile(
+                icon: Icons.dns_outlined,
+                label: 'Total',
+                value: '${s.total}',
+                onTap: () => context.push(Routes.servers),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
-                child: _CountTile(
-                    label: 'Active',
-                    value: s.active,
-                    icon: Icons.check_circle_outline,
-                    color: Colors.green)),
-            const SizedBox(width: 12),
+              child: StatTile(
+                icon: Icons.check_circle_outline,
+                label: 'Active',
+                value: '${s.active}',
+                accentColor: AppColors.success,
+                onTap: () => context.push(Routes.servers),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
-                child: _CountTile(
-                    label: 'Provisioning',
-                    value: s.provisioning,
-                    icon: Icons.hourglass_empty,
-                    color: Colors.amber.shade800)),
+              child: StatTile(
+                icon: Icons.hourglass_empty,
+                label: 'Provisioning',
+                value: '${s.provisioning}',
+                accentColor: AppColors.warning,
+                onTap: () => context.push(Routes.servers),
+              ),
+            ),
           ],
-        ),
+        ).animate().fadeIn(duration: 300.ms).slideY(
+            begin: 0.06, end: 0),
         if (s.other > 0) ...[
-          const SizedBox(height: 12),
-          _CountTile(
-              label: 'Other states',
-              value: s.other,
-              icon: Icons.info_outline,
-              color: Colors.orange),
+          const SizedBox(height: AppSpacing.sm),
+          StatTile(
+            icon: Icons.info_outline,
+            label: 'Other states',
+            value: '${s.other}',
+            accentColor: AppColors.info,
+            onTap: () => context.push(Routes.servers),
+          )
+              .animate()
+              .fadeIn(duration: 300.ms)
+              .slideY(begin: 0.06, end: 0),
         ],
         if ((summary.unreadNotifications ?? 0) > 0) ...[
-          const SizedBox(height: 12),
-          _Badge(
-              label:
-                  '${summary.unreadNotifications} unread notification(s) — notifications list is coming soon',
-              color: theme.colorScheme.primary),
+          const SizedBox(height: AppSpacing.sm),
+          _Chip(
+            label:
+                '${summary.unreadNotifications} unread notification(s) — notifications list is coming soon',
+            bg: AppColors.pendingBg,
+            fg: AppColors.pendingFg,
+          ).animate().fadeIn(duration: 300.ms),
         ],
       ],
     );
   }
 }
 
-class _CountTile extends StatelessWidget {
-  const _CountTile(
-      {required this.label, required this.value, required this.icon, this.color});
+class _WalletCard extends StatelessWidget {
+  const _WalletCard({required this.summary});
 
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color? color;
+  final HomeSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Icon(icon, color: color ?? theme.colorScheme.primary),
-            const SizedBox(height: 4),
-            Text('$value',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            Text(label, style: theme.textTheme.bodySmall),
-          ],
+    final w = summary.wallet;
+    return AppCard(
+      gradientBorder: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Wallet', style: AppTypography.title),
+              const Spacer(),
+              if ((summary.pendingTopups ?? 0) > 0)
+                _Chip(
+                  label:
+                      '${summary.pendingTopups} pending top-up(s)',
+                  bg: AppColors.pendingBg,
+                  fg: AppColors.pendingFg,
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            MoneyFormatter.usdString(w.availableUsd),
+            style: AppTypography.display
+                .copyWith(color: AppColors.accent),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Pending ${MoneyFormatter.usdString(w.pendingUsd)}'
+            ' · Lifetime ${MoneyFormatter.usdString(w.lifetimeEarnedUsd)}',
+            style: AppTypography.caption,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(
+        begin: 0.06, end: 0);
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip(
+      {required this.label, required this.bg, required this.fg});
+
+  final String label;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: fg.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: color, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-class _NavCard extends StatelessWidget {
-  const _NavCard(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.onTap});
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.delay = 0,
+  });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final int delay;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
+    return AppCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child:
+                Icon(icon, size: 20, color: AppColors.accent),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTypography.title),
+                const SizedBox(height: 2),
+                Text(subtitle, style: AppTypography.caption),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right,
+              color: AppColors.textMuted),
+        ],
       ),
-    );
+    )
+        .animate(delay: Duration(milliseconds: delay))
+        .fadeIn(duration: 300.ms)
+        .slideY(begin: 0.06, end: 0);
   }
 }
 
@@ -364,23 +482,32 @@ class _DemoBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        0,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.pendingBg,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: AppColors.pendingFg.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
-          Icon(Icons.science_outlined, color: scheme.onTertiaryContainer),
-          const SizedBox(width: 12),
+          const Icon(Icons.science_outlined,
+              color: AppColors.pendingFg),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'DEMO mode — sample data, no backend. '
               'Pass --dart-define=DEMO=false for the real API.',
-              style: TextStyle(color: scheme.onTertiaryContainer),
+              style: AppTypography.bodySecondary
+                  .copyWith(color: AppColors.pendingFg),
             ),
           ),
         ],
