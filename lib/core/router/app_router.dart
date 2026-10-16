@@ -9,6 +9,7 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/servers/presentation/credentials_screen.dart';
+import '../../features/servers/presentation/firewall_screen.dart';
 import '../../features/servers/presentation/regenerate_screen.dart';
 import '../../features/servers/presentation/server_detail_screen.dart';
 import '../../features/servers/presentation/server_list_screen.dart';
@@ -92,7 +93,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           serverId: int.parse(state.pathParameters['id']!),
         ),
       ),
-      _comingSoon(Routes.serverFirewall, 'Firewall'),
+      GoRoute(
+        path: Routes.serverFirewall,
+        builder: (context, state) => FirewallScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
       GoRoute(
         path: Routes.serverCredentials,
         builder: (context, state) => CredentialsScreen(

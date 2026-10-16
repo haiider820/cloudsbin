@@ -85,6 +85,12 @@ class HomeScreen extends ConsumerWidget {
                     onTap: () => context.go(Routes.serverWhitelistPath(9206568)),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.local_fire_department_outlined),
+                    title: const Text('Firewall'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go(Routes.serverFirewallPath(9206568)),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.key_outlined),
                     title: const Text('Credentials'),
                     trailing: const Icon(Icons.chevron_right),

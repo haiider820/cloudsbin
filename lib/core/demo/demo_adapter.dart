@@ -52,6 +52,21 @@ class DemoAdapter implements HttpClientAdapter {
       return _ok({'message': 'IP removed from the whitelist.', 'rule_id': 56, 'removed': true});
     }
     if (_ends(path, '/servers/usage')) return _ok(_usage);
+    if (_ends(path, '/servers/firewall')) return _ok(_firewall);
+    if (_ends(path, '/servers/firewall-add')) {
+      return _ok({
+        'message': 'Firewall rule added.',
+        'direction': 'inbound',
+        'protocol': 'tcp',
+        'port_start': 8443,
+        'port_end': 8443,
+        'source_cidr': '198.51.100.0/24',
+        'access_port': 22,
+      });
+    }
+    if (_ends(path, '/servers/firewall-remove')) {
+      return _ok({'message': 'Firewall rule removed.', 'rule_id': 92, 'removed': true});
+    }
     if (_ends(path, '/servers/detail')) {
       final id = int.tryParse('${options.queryParameters['id']}') ?? 9206568;
       return _ok(_detail(id));
@@ -295,6 +310,33 @@ class DemoAdapter implements HttpClientAdapter {
       },
     ],
     'access_port': 22,
+  };
+
+  static const Map<String, dynamic> _firewall = {
+    'rules': [
+      {
+        'id': 92,
+        'direction': 'inbound',
+        'protocol': 'tcp',
+        'port_start': 8443,
+        'port_end': 8443,
+        'ip_cidr': '198.51.100.0/24',
+        'description': 'https',
+        'created_at': '2026-10-16T10:12:52Z',
+      },
+      {
+        'id': 93,
+        'direction': 'inbound',
+        'protocol': 'udp',
+        'port_start': 51820,
+        'port_end': 51820,
+        'ip_cidr': '203.0.113.9/32',
+        'description': 'wireguard',
+        'created_at': '2026-10-16T10:14:00Z',
+      },
+    ],
+    'access_port': 22,
+    'directions': ['inbound'],
   };
 
   static const Map<String, dynamic> _sessions = {

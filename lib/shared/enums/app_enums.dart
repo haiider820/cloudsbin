@@ -38,7 +38,7 @@ class ServerStatus {
     return ServerStatus._(value.isEmpty ? 'unknown' : value);
   }
 
-  static String toJson(ServerStatus status) => status.raw;
+  static String? toJson(ServerStatus? status) => status?.raw;
 
   bool get isActive => raw == 'active';
   bool get isProvisioning => raw == 'provisioning';
@@ -85,7 +85,7 @@ class PaymentRequestStatus {
     }
   }
 
-  static String toJson(PaymentRequestStatus status) => status.raw;
+  static String? toJson(PaymentRequestStatus? status) => status?.raw;
 
   @override
   bool operator ==(Object other) =>
@@ -122,7 +122,7 @@ class CryptoPaymentStatus {
     }
   }
 
-  static String toJson(CryptoPaymentStatus status) => status.raw;
+  static String? toJson(CryptoPaymentStatus? status) => status?.raw;
 
   bool get isTerminal => raw != 'PENDING';
 
@@ -158,7 +158,7 @@ class OrderStatus {
     }
   }
 
-  static String toJson(OrderStatus status) => status.raw;
+  static String? toJson(OrderStatus? status) => status?.raw;
 
   @override
   bool operator ==(Object other) => other is OrderStatus && other.raw == raw;
@@ -184,7 +184,7 @@ class Platform {
     return value == 'ios' ? ios : value == 'android' ? android : Platform._(value);
   }
 
-  static String toJson(Platform platform) => platform.raw;
+  static String? toJson(Platform? platform) => platform?.raw;
 
   @override
   bool operator ==(Object other) => other is Platform && other.raw == raw;
@@ -207,7 +207,7 @@ class FirewallDirection {
   factory FirewallDirection.fromJson(dynamic raw) =>
       FirewallDirection._(raw?.toString() ?? 'inbound');
 
-  static String toJson(FirewallDirection direction) => direction.raw;
+  static String? toJson(FirewallDirection? direction) => direction?.raw;
 
   @override
   bool operator ==(Object other) =>
@@ -241,7 +241,7 @@ class FirewallProtocol {
     }
   }
 
-  static String toJson(FirewallProtocol protocol) => protocol.raw;
+  static String? toJson(FirewallProtocol? protocol) => protocol?.raw;
 
   @override
   bool operator ==(Object other) =>
@@ -281,7 +281,7 @@ class AuthType {
     }
   }
 
-  static String toJson(AuthType authType) => authType.raw;
+  static String? toJson(AuthType? authType) => authType?.raw;
 
   @override
   bool operator ==(Object other) => other is AuthType && other.raw == raw;

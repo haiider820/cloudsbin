@@ -6,6 +6,7 @@ import '../../../core/api/api_error.dart';
 import '../../../shared/enums/app_enums.dart';
 import '../../../shared/models/paged.dart';
 import 'models/credential_reveal.dart';
+import 'models/firewall.dart';
 import 'models/ip_whitelist.dart';
 import 'models/regenerate_result.dart';
 import 'models/server_detail.dart';
@@ -75,6 +76,66 @@ class ServerRepository {
         },
       );
       return ServerUsage.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `GET /servers/firewall?id=` (§6.27). Inbound only.
+  Future<FirewallResponse> firewall(int serverId) async {
+    try {
+      final response = await _client.dio.get<Map<String, dynamic>>(
+        'servers/firewall',
+        queryParameters: {'id': serverId},
+      );
+      return FirewallResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/firewall-add` (§6.28). Direction is always `inbound`;
+  /// outbound is rejected with 400 DIRECTION_NOT_SUPPORTED by design.
+  Future<FirewallAddResult> firewallAdd({
+    required int serverId,
+    required FirewallProtocol protocol,
+    required int portStart,
+    int? portEnd,
+    String? sourceCidr,
+    String? description,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/firewall-add',
+        data: {
+          'server_id': serverId,
+          'direction': FirewallDirection.inbound.raw,
+          'protocol': protocol.raw,
+          'port_start': portStart,
+          if (portEnd != null) 'port_end': portEnd,
+          if (sourceCidr != null && sourceCidr.isNotEmpty)
+            'source_cidr': sourceCidr,
+          if (description != null && description.isNotEmpty)
+            'description': description,
+        },
+      );
+      return FirewallAddResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/firewall-remove` (§6.29).
+  Future<FirewallRemoveResult> firewallRemove({
+    required int serverId,
+    required int ruleId,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/firewall-remove',
+        data: {'server_id': serverId, 'rule_id': ruleId},
+      );
+      return FirewallRemoveResult.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
