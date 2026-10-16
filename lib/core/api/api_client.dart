@@ -14,6 +14,12 @@ const String apiBaseUrl = String.fromEnvironment(
   defaultValue: 'https://cloudsbin.duckdns.org/api/v1',
 );
 
+/// Ensures the base URL ends with a single `/` so relative endpoint paths
+/// (`auth/login`) join correctly — Dio concatenates the two literally, so
+/// without this every request would hit `/api/v1auth/login` and 404.
+String _normalizeBaseUrl(String baseUrl) =>
+    baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+
 /// App version reported via `X-App-Version` (compared to `min_app_version`).
 /// Overridden in [main] with the real value from package_info_plus.
 final appVersionProvider = Provider<String>((ref) => '1.0.0');
@@ -27,7 +33,7 @@ class ApiClient {
     String baseUrl = apiBaseUrl,
   }) : dio = Dio(
           BaseOptions(
-            baseUrl: baseUrl,
+            baseUrl: _normalizeBaseUrl(baseUrl),
             headers: {'X-App-Version': appVersion},
             connectTimeout: const Duration(seconds: 15),
             receiveTimeout: const Duration(seconds: 30),
@@ -36,7 +42,7 @@ class ApiClient {
         ) {
     _refreshClient = Dio(
       BaseOptions(
-        baseUrl: baseUrl,
+        baseUrl: _normalizeBaseUrl(baseUrl),
         headers: {'X-App-Version': appVersion},
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
