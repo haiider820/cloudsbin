@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,7 +8,12 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/storage/secure_storage.dart';
-import '../../../shared/widgets/loading_button.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_text_field.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/auth_repository.dart';
 import '../data/auth_session.dart';
 
@@ -24,7 +30,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _submitting = false;
-  bool _obscure = true;
   String? _formError;
   String? _emailError;
   String? _passwordError;
@@ -95,96 +100,173 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: AppColors.bg0,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Icon(Icons.cloud_outlined, size: 56, color: theme.colorScheme.primary),
-                    const SizedBox(height: 16),
-                    Text('CloudsBin', textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sign in to manage your servers',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline),
-                    ),
-                    const SizedBox(height: 32),
-                    if (_formError != null) ...[
-                      _ErrorBanner(message: _formError!),
-                      const SizedBox(height: 16),
-                    ],
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: const Icon(Icons.mail_outline),
-                        errorText: _emailError,
-                      ),
-                      validator: (value) {
-                        final v = value?.trim() ?? '';
-                        if (v.isEmpty) return 'Email is required';
-                        if (!v.contains('@')) return 'Enter a valid email';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscure,
-                      autofillHints: const [AutofillHints.password],
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _submit(),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        errorText: _passwordError,
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () => setState(() => _obscure = !_obscure),
-                        ),
-                      ),
-                      validator: (value) =>
-                          (value == null || value.isEmpty) ? 'Password is required' : null,
-                    ),
-                    const SizedBox(height: 24),
-                    LoadingButton(
-                      loading: _submitting,
-                      onPressed: _submit,
-                      child: const Text('Sign in'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _submitting ? null : () => context.go(Routes.forgotPassword),
-                      child: const Text('Forgot password?'),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
+          children: [
+            // Ambient glow.
+            const Positioned(
+              top: -70,
+              right: -50,
+              child: _Glow(color: AppColors.glowCyan, size: 220),
+            ),
+            const Positioned(
+              top: 60,
+              left: -70,
+              child: _Glow(color: AppColors.glowViolet, size: 180),
+            ),
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xl,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppSpacing.maxContentWidth,
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text("Don't have an account?"),
-                        TextButton(
-                          onPressed: _submitting ? null : () => context.go(Routes.register),
-                          child: const Text('Sign up'),
-                        ),
+                        const Center(
+                              child: BrandMark(size: 84),
+                            )
+                            .animate()
+                            .fadeIn(duration: 350.ms)
+                            .slideY(begin: 0.15, end: 0, duration: 350.ms),
+                        const SizedBox(height: AppSpacing.lg),
+                        Text(
+                          'Welcome back',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.display,
+                        )
+                            .animate()
+                            .fadeIn(delay: 80.ms, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Sign in to manage your servers',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodySecondary,
+                        )
+                            .animate()
+                            .fadeIn(delay: 140.ms, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.xl),
+                        if (_formError != null) ...[
+                          _ErrorBanner(message: _formError!)
+                              .animate()
+                              .fadeIn(duration: 250.ms),
+                          const SizedBox(height: AppSpacing.md),
+                        ],
+                        AppTextField(
+                          controller: _emailController,
+                          label: 'Email',
+                          hint: 'you@example.com',
+                          prefixIcon: Icons.mail_outline,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          textInputAction: TextInputAction.next,
+                          errorText: _emailError,
+                          validator: (value) {
+                            final v = value?.trim() ?? '';
+                            if (v.isEmpty) return 'Email is required';
+                            if (!v.contains('@')) return 'Enter a valid email';
+                            return null;
+                          },
+                        )
+                            .animate()
+                            .fadeIn(delay: 200.ms, duration: 300.ms)
+                            .slideY(begin: 0.08, end: 0, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.md),
+                        AppTextField(
+                          controller: _passwordController,
+                          label: 'Password',
+                          hint: 'Your password',
+                          prefixIcon: Icons.lock_outline,
+                          obscureText: true,
+                          toggleObscure: true,
+                          autofillHints: const [AutofillHints.password],
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _submit(),
+                          errorText: _passwordError,
+                          validator: (value) =>
+                              (value == null || value.isEmpty)
+                                  ? 'Password is required'
+                                  : null,
+                        )
+                            .animate()
+                            .fadeIn(delay: 260.ms, duration: 300.ms)
+                            .slideY(begin: 0.08, end: 0, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.lg),
+                        AppButton(
+                          label: 'Sign in',
+                          loading: _submitting,
+                          onPressed: _submit,
+                          icon: Icons.login_outlined,
+                        )
+                            .animate()
+                            .fadeIn(delay: 320.ms, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.xs),
+                        Align(
+                          alignment: Alignment.center,
+                          child: AppButton(
+                            label: 'Forgot password?',
+                            variant: AppButtonVariant.ghost,
+                            fullWidth: false,
+                            onPressed: _submitting
+                                ? null
+                                : () => context.go(Routes.forgotPassword),
+                          ),
+                        ).animate().fadeIn(delay: 380.ms, duration: 300.ms),
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Don't have an account?",
+                              style: AppTypography.bodySecondary,
+                            ),
+                            AppButton(
+                              label: 'Sign up',
+                              variant: AppButtonVariant.ghost,
+                              fullWidth: false,
+                              dense: true,
+                              onPressed: _submitting
+                                  ? null
+                                  : () => context.go(Routes.register),
+                            ),
+                          ],
+                        ).animate().fadeIn(delay: 440.ms, duration: 300.ms),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Glow extends StatelessWidget {
+  const _Glow({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color, Colors.transparent],
         ),
       ),
     );
@@ -198,19 +280,23 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.dangerBg,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, color: scheme.onErrorContainer),
-          const SizedBox(width: 12),
+          const Icon(Icons.error_outline, color: AppColors.dangerFg, size: 20),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(message, style: TextStyle(color: scheme.onErrorContainer)),
+            child: Text(
+              message,
+              style: AppTypography.bodySecondary
+                  .copyWith(color: AppColors.dangerFg),
+            ),
           ),
         ],
       ),
