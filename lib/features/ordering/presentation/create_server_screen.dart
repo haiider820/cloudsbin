@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/idempotency_key.dart';
 import '../../../shared/utils/money_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
-import '../../../shared/widgets/loading_button.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/models/cloud_image.dart';
 import '../data/models/plan.dart';
 import '../data/models/server_create_result.dart';
@@ -65,6 +73,22 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
     final plan = _plans.where((p) => p.slug == _planSlug);
     if (plan.isEmpty) return [];
     return plan.first.regions.map((r) => r.slug).toList();
+  }
+
+  Plan? get _selectedPlan {
+    for (final p in _plans) {
+      if (p.slug == _planSlug) return p;
+    }
+    return null;
+  }
+
+  String? get _priceDisplay {
+    final plan = _selectedPlan;
+    if (plan == null) return null;
+    return plan.priceDisplay ??
+        (plan.priceCents != null
+            ? MoneyFormatter.fromCents(plan.priceCents!)
+            : null);
   }
 
   @override
@@ -131,6 +155,21 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
     }
   }
 
+  void _selectPlan(String? slug) {
+    setState(() {
+      _planSlug = slug;
+      _customSpecs = slug == 'custom';
+      final regions = _regionsForPlan;
+      _region = regions.isNotEmpty ? regions.first : null;
+    });
+    _loadImages();
+  }
+
+  void _selectRegion(String? slug) {
+    setState(() => _region = slug);
+    _loadImages();
+  }
+
   Future<void> _submit() async {
     final planSlug = _planSlug;
     if (planSlug == null) {
@@ -186,157 +225,411 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Create server')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingView(message: 'Loading plans…')
           : _result != null
               ? _SuccessView(result: _result!)
-              : ListView(
-                  padding: const EdgeInsets.all(16),
+              : Column(
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _planSlug,
-                      decoration: const InputDecoration(labelText: 'Plan'),
-                      items: [
-                        ..._plans.map((p) => DropdownMenuItem(
-                              value: p.slug,
-                              child: Text(
-                                '${p.displayName ?? p.name}'
-                                '${p.priceDisplay != null ? ' · ${p.priceDisplay}' : ''}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            )),
-                        const DropdownMenuItem(
-                          value: 'custom',
-                          child: Text('Custom specs'),
+                    Expanded(child: _buildForm()),
+                    _buildBottomBar(),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildForm() {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      children: [
+        const HeroHeader(
+          eyebrow: 'New server',
+          title: 'Create server',
+          subtitle: 'Configure your server. The wallet is debited server-side.',
+          icon: Icons.add_to_queue_outlined,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeader(
+                title: 'Plan',
+                subtitle: 'The size of your server',
+                icon: Icons.dns_outlined,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ..._plans.asMap().entries.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: _PlanOption(
+                        plan: e.value,
+                        selected: _planSlug == e.value.slug,
+                        onTap: () => _selectPlan(e.value.slug),
+                      ).animate().fadeIn(duration: 300.ms).slideY(
+                            begin: 0.06,
+                            end: 0,
+                          ),
+                    ),
+                  ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: AppCard(
+                  onTap: () => _selectPlan('custom'),
+                  gradientBorder: _customSpecs,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentViolet
+                              .withValues(alpha: 0.12),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.sm),
                         ),
-                      ],
-                      onChanged: (v) {
-                        setState(() {
-                          _planSlug = v;
-                          _customSpecs = v == 'custom';
-                          final regions = _regionsForPlan;
-                          _region =
-                              regions.isNotEmpty ? regions.first : null;
-                        });
-                        _loadImages();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: _region,
-                      decoration: const InputDecoration(labelText: 'Region'),
-                      items: _regionsForPlan
-                          .map((r) => DropdownMenuItem(
-                                value: r,
-                                child: Text(r),
-                              ))
-                          .toList(),
-                      onChanged: (v) {
-                        setState(() => _region = v);
-                        _loadImages();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    if (_customSpecs) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _vcpuController,
-                              keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: 'vCPU'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _ramController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
-                              decoration:
-                                  const InputDecoration(labelText: 'RAM (GB)'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _ssdController,
-                              keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: 'SSD (GB)'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                    ] else
-                      _loadingImages
-                          ? const LinearProgressIndicator()
-                          : DropdownButtonFormField<String>(
-                              initialValue: _image,
-                              decoration:
-                                  const InputDecoration(labelText: 'Image'),
-                              items: _images
-                                  .map((i) => DropdownMenuItem(
-                                        value: i.slug,
-                                        child: Text(i.name,
-                                            overflow: TextOverflow.ellipsis),
-                                      ))
-                                  .toList(),
-                              onChanged: (v) => setState(() => _image = v),
-                            ),
-                    if (!_customSpecs) const SizedBox(height: 16),
-                    TextField(
-                      controller: _sshController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'SSH public key (optional)',
-                        hintText: 'ssh-ed25519 AAAA…',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      title: const Text('Autoscale'),
-                      value: _autoscale,
-                      onChanged: (v) => setState(() => _autoscale = v),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_error != null) ...[
-                      Card(
-                        color: theme.colorScheme.errorContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            _error!.code == 'CONFLICT'
-                                ? 'This request is already being processed. Check your orders instead of resubmitting.'
-                                : _error!.userMessage,
-                            style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer,
-                            ),
-                          ),
+                        child: const Icon(
+                          Icons.tune_outlined,
+                          size: 20,
+                          color: AppColors.accentViolet,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(width: AppSpacing.sm),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Custom specs',
+                                style: AppTypography.title),
+                            SizedBox(height: 2),
+                            Text(
+                              'Enter your own vCPU / RAM / SSD below',
+                              style: AppTypography.caption,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_customSpecs)
+                        const Icon(Icons.check_circle,
+                            size: 22, color: AppColors.accent),
                     ],
-                    LoadingButton(
-                      loading: _submitting,
-                      onPressed: _submit,
-                      child: const Text('Create server'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const SectionHeader(
+                title: 'Region',
+                subtitle: 'Where your server will live',
+                icon: Icons.public_outlined,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: _regionsForPlan
+                    .map((r) => _OptionPill(
+                          label: r,
+                          selected: _region == r,
+                          onTap: () => _selectRegion(r),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (_customSpecs) ...[
+                const SectionHeader(
+                  title: 'Custom specs',
+                  subtitle: 'All values must be greater than zero',
+                  icon: Icons.tune_outlined,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _vcpuController,
+                        label: 'vCPU',
+                        hint: '1',
+                        keyboardType: TextInputType.number,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'The wallet is debited server-side. The price is never computed on this device.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _ramController,
+                        label: 'RAM (GB)',
+                        hint: '1',
+                        keyboardType:
+                            const TextInputType.numberWithOptions(
+                                decimal: true),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _ssdController,
+                        label: 'SSD (GB)',
+                        hint: '25',
+                        keyboardType: TextInputType.number,
                       ),
                     ),
                   ],
                 ),
+              ] else ...[
+                const SectionHeader(
+                  title: 'Image',
+                  subtitle: 'The operating system',
+                  icon: Icons.disc_full_outlined,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (_loadingImages)
+                  const AppShimmer(itemCount: 2, itemHeight: 48)
+                else if (_images.isEmpty)
+                  const Text(
+                    'No images available for this plan and region.',
+                    style: AppTypography.caption,
+                  )
+                else
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: _images
+                        .map((i) => _OptionPill(
+                              label: i.name,
+                              selected: _image == i.slug,
+                              onTap: () => setState(() => _image = i.slug),
+                            ))
+                        .toList(),
+                  ),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              const SectionHeader(
+                title: 'Access',
+                subtitle: 'Optional extras',
+                icon: Icons.key_outlined,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppTextField(
+                controller: _sshController,
+                label: 'SSH public key (optional)',
+                hint: 'ssh-ed25519 AAAA…',
+                prefixIcon: Icons.key_outlined,
+                maxLines: 2,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.xs,
+                ),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Autoscale',
+                      style: AppTypography.body),
+                  subtitle: const Text(
+                    'Let the server scale automatically',
+                    style: AppTypography.caption,
+                  ),
+                  value: _autoscale,
+                  onChanged: (v) => setState(() => _autoscale = v),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                AppCard(
+                  color: AppColors.dangerBg,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 20, color: AppColors.danger),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          _error!.code == 'CONFLICT'
+                              ? 'This request is already being processed. Check your orders instead of resubmitting.'
+                              : _error!.userMessage,
+                          style: AppTypography.bodySecondary.copyWith(
+                            color: AppColors.dangerFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'The wallet is debited server-side. The price is never computed on this device.',
+                style: AppTypography.caption,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar() {
+    final price = _customSpecs ? null : _priceDisplay;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bg1,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            AppSpacing.md,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (price != null) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total', style: AppTypography.bodySecondary),
+                    Text(
+                      '$price /mo',
+                      style: AppTypography.title.copyWith(
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+              AppButton(
+                label: 'Create server',
+                icon: Icons.add,
+                loading: _submitting,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Selectable plan card with a gradient border when selected.
+class _PlanOption extends StatelessWidget {
+  const _PlanOption({
+    required this.plan,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Plan plan;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = plan.specs;
+    final specLine = [
+      specs?.vcpuLabel,
+      specs?.ramLabel,
+      specs?.ssdLabel,
+    ].whereType<String>().join(' · ');
+    final price = plan.priceDisplay ??
+        (plan.priceCents != null
+            ? MoneyFormatter.fromCents(plan.priceCents!)
+            : null);
+    return AppCard(
+      onTap: onTap,
+      gradientBorder: selected,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Icon(
+              Icons.dns_outlined,
+              size: 20,
+              color: AppColors.accent,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  plan.displayName ?? plan.name,
+                  style: AppTypography.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (specLine.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    specLine,
+                    style: AppTypography.caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (price != null)
+            Text(
+              price,
+              style: AppTypography.title.copyWith(
+                color: AppColors.accent,
+              ),
+            ),
+          const SizedBox(width: AppSpacing.xs),
+          Icon(
+            selected ? Icons.check_circle : Icons.circle_outlined,
+            size: 22,
+            color: selected ? AppColors.accent : AppColors.textMuted,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact selectable pill for region / image options.
+class _OptionPill extends StatelessWidget {
+  const _OptionPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      onTap: onTap,
+      gradientBorder: selected,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: Text(
+        label,
+        style: AppTypography.bodySecondary.copyWith(
+          color: selected ? AppColors.textPrimary : null,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        ),
+      ),
     );
   }
 }
@@ -348,36 +641,59 @@ class _SuccessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline,
-                size: 56, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text('Server #${result.serverId} is provisioning.',
-                style: theme.textTheme.titleMedium,
-                textAlign: TextAlign.center),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.glowCyan,
+                    blurRadius: 48,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.check,
+                size: 44,
+                color: AppColors.onAccent,
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 300.ms)
+                .slideY(begin: 0.06, end: 0),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Server #${result.serverId} is provisioning.',
+              style: AppTypography.headline,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.xs),
             if (result.totalCents != null)
               Text(
                 'Charged ${MoneyFormatter.fromCents(result.totalCents!)} from your wallet.',
-                style: theme.textTheme.bodyMedium,
+                style: AppTypography.bodySecondary,
                 textAlign: TextAlign.center,
               ),
-            const SizedBox(height: 24),
-            FilledButton(
+            const SizedBox(height: AppSpacing.xl),
+            AppButton(
+              label: 'View server',
+              icon: Icons.dns_outlined,
               onPressed: () =>
                   context.go(Routes.serverDetailPath(result.serverId)),
-              child: const Text('View server'),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
+            const SizedBox(height: AppSpacing.sm),
+            AppButton(
+              label: 'Back to servers',
+              variant: AppButtonVariant.secondary,
               onPressed: () => context.go(Routes.servers),
-              child: const Text('Back to servers'),
             ),
           ],
         ),

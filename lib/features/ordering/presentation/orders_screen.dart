@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/date_formatter.dart';
 import '../../../shared/utils/money_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/paginated_list.dart';
 import '../data/models/order.dart';
 import '../data/order_repository.dart';
@@ -31,7 +36,7 @@ class OrdersScreen extends ConsumerWidget {
       body: PaginatedList<OrderItem>(
         fetcher: (page) =>
             ref.read(orderRepositoryProvider).orders(page: page),
-        emptyState: const EmptyState(
+        emptyState: const AppEmptyState(
           icon: Icons.receipt_long_outlined,
           title: 'No orders yet',
           message: 'Orders you place will appear here.',
@@ -47,104 +52,136 @@ class _OrderCard extends StatelessWidget {
 
   final OrderItem order;
 
-  Color _statusColor(BuildContext context) {
+  /// Same status mapping as before, now on the brand token tones:
+  /// server_created → green, pending → amber, rejected → red,
+  /// anything else → orange.
+  (Color, Color) get _statusTones {
     switch (order.status.raw) {
       case 'server_created':
-        return Colors.green;
+        return (AppColors.activeBg, AppColors.activeFg);
       case 'pending':
-        return Colors.amber.shade800;
+        return (AppColors.pendingBg, AppColors.pendingFg);
       case 'rejected':
-        return Theme.of(context).colorScheme.error;
+        return (AppColors.dangerBg, AppColors.dangerFg);
       default:
-        return Colors.orange;
+        return (AppColors.attentionBg, AppColors.attentionFg);
     }
   }
 
+  String get _statusLabel => order.status.raw
+      .split('_')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Order #${order.id}',
-                    style: theme.textTheme.titleMedium,
-                  ),
+    final (bg, fg) = _statusTones;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Order #${order.id}',
+                  style: AppTypography.mono.copyWith(fontSize: 14.5),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _statusColor(context).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    order.status.raw.replaceAll('_', ' '),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: _statusColor(context),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 5,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${order.planName ?? order.planSlug ?? '—'}'
-              '${order.region != null ? ' · ${order.region}' : ''}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  order.totalCents != null
-                      ? MoneyFormatter.fromCents(order.totalCents!)
-                      : '—',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(color: fg.withValues(alpha: 0.35)),
                 ),
-                Text(
-                  DateFormatter.isoToLocal(
-                      order.createdAt?.toIso8601String()),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ),
-            if (order.serverId != null) ...[
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () =>
-                    context.push(Routes.serverDetailPath(order.serverId!)),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.dns_outlined,
-                        size: 16, color: theme.colorScheme.primary),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: fg,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     Text(
-                      'Server #${order.serverId}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.primary,
+                      _statusLabel,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ],
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '${order.planName ?? order.planSlug ?? '—'}'
+            '${order.region != null ? ' · ${order.region}' : ''}',
+            style: AppTypography.bodySecondary,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                order.totalCents != null
+                    ? MoneyFormatter.fromCents(order.totalCents!)
+                    : '—',
+                style: AppTypography.title.copyWith(
+                  color: AppColors.accent,
+                ),
+              ),
+              Text(
+                DateFormatter.isoToLocal(
+                    order.createdAt?.toIso8601String()),
+                style: AppTypography.caption,
+              ),
+            ],
+          ),
+          if (order.serverId != null) ...[
+            const Divider(height: AppSpacing.lg),
+            InkWell(
+              onTap: () =>
+                  context.push(Routes.serverDetailPath(order.serverId!)),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.xxs,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.dns_outlined,
+                        size: 16, color: AppColors.accent),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'Server #${order.serverId}',
+                      style: AppTypography.bodySecondary.copyWith(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xxs),
+                    const Icon(Icons.arrow_forward,
+                        size: 14, color: AppColors.accent),
+                  ],
+                ),
+              ),
+            ),
           ],
-        ),
+        ],
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0);
   }
 }

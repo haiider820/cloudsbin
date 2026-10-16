@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/money_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
-import '../../../shared/widgets/loading_button.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/models/estimate_result.dart';
 import '../data/models/region.dart';
 import '../data/order_repository.dart';
@@ -102,83 +111,142 @@ class _EstimateScreenState extends ConsumerState<EstimateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Estimate price')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         children: [
-          Text(
-            'Custom specs — the server computes the price; nothing is charged here.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
+          const HeroHeader(
+            eyebrow: 'Price calculator',
+            title: 'Estimate price',
+            subtitle:
+                'Custom specs — the server computes the price. Nothing is charged here.',
+            icon: Icons.calculate_outlined,
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _vcpuController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'vCPU'),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(
+                  title: 'Specs',
+                  subtitle: 'Enter the resources you need',
+                  icon: Icons.tune_outlined,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _ramController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'RAM (GB)'),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _vcpuController,
+                        label: 'vCPU',
+                        hint: '1',
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _ramController,
+                        label: 'RAM (GB)',
+                        hint: '1',
+                        keyboardType:
+                            const TextInputType.numberWithOptions(
+                                decimal: true),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppTextField(
+                        controller: _ssdController,
+                        label: 'SSD (GB)',
+                        hint: '25',
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _ssdController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'SSD (GB)'),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(
+                  title: 'Region',
+                  subtitle: 'Where the server will live',
+                  icon: Icons.public_outlined,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _loadingRegions
-              ? const LinearProgressIndicator()
-              : DropdownButtonFormField<String>(
-                  initialValue: _region,
-                  decoration: const InputDecoration(labelText: 'Region'),
-                  items: _regions
-                      .map((r) => DropdownMenuItem(
-                            value: r.slug,
-                            child: Text(r.displayName ?? r.slug),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _region = v),
+                const SizedBox(height: AppSpacing.md),
+                _loadingRegions
+                    ? const AppShimmerInline()
+                    : DropdownButtonFormField<String>(
+                        initialValue: _region,
+                        decoration:
+                            const InputDecoration(labelText: 'Region'),
+                        items: _regions
+                            .map((r) => DropdownMenuItem(
+                                  value: r.slug,
+                                  child: Text(r.displayName ?? r.slug),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setState(() => _region = v),
+                      ),
+                const SizedBox(height: AppSpacing.lg),
+                AppButton(
+                  label: 'Estimate',
+                  icon: Icons.calculate_outlined,
+                  loading: _submitting,
+                  onPressed: _estimate,
                 ),
-          const SizedBox(height: 20),
-          LoadingButton(
-            loading: _submitting,
-            onPressed: _estimate,
-            child: const Text('Estimate'),
-          ),
-          const SizedBox(height: 20),
-          if (_error != null)
-            Card(
-              color: theme.colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _error!.userMessage,
-                  style: TextStyle(
-                    color: theme.colorScheme.onErrorContainer,
+                const SizedBox(height: AppSpacing.lg),
+                if (_error != null) ...[
+                  AppCard(
+                    color: AppColors.dangerBg,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            size: 20, color: AppColors.danger),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _error!.userMessage,
+                            style: AppTypography.bodySecondary.copyWith(
+                              color: AppColors.dangerFg,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+                if (_result != null) _ResultCard(result: _result!),
+              ],
             ),
-          if (_result != null) _ResultCard(result: _result!),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Compact loading placeholder for the region dropdown while it loads.
+class AppShimmerInline extends StatelessWidget {
+  const AppShimmerInline({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: AppColors.bg2,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: const Center(
+        child: SizedBox(
+          height: 22,
+          width: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
       ),
     );
   }
@@ -191,49 +259,56 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final price = result.priceDisplay ??
         (result.priceCents != null
             ? MoneyFormatter.fromCents(result.priceCents!)
             : '—');
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Estimated price', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(
-              '$price /mo',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Divider(height: 24),
-            _row(theme, 'vCPU', '${result.vcpu ?? '—'}'),
-            _row(
-                theme, 'RAM', result.ramGb != null ? '${result.ramGb} GB' : '—'),
-            _row(
-                theme, 'SSD', result.ssdGb != null ? '${result.ssdGb} GB' : '—'),
-            _row(theme, 'Region', result.region ?? result.regionSlug ?? '—'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(ThemeData theme, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: theme.textTheme.bodyMedium),
-          Text(value, style: theme.textTheme.bodyMedium),
+          const SectionHeader(
+            title: 'Estimated price',
+            subtitle: 'Server-computed monthly price',
+            icon: Icons.receipt_long_outlined,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            price,
+            style: AppTypography.display.copyWith(
+              color: AppColors.accent,
+            ),
+          ),
+          const Text('/month', style: AppTypography.caption),
+          const Divider(height: AppSpacing.lg),
+          InfoRow(
+            label: 'vCPU',
+            value: result.vcpu != null ? '${result.vcpu}' : '—',
+            mono: true,
+          ),
+          InfoRow(
+            label: 'RAM',
+            value: result.ramGb != null ? '${result.ramGb} GB' : '—',
+            mono: true,
+          ),
+          InfoRow(
+            label: 'SSD',
+            value: result.ssdGb != null ? '${result.ssdGb} GB' : '—',
+            mono: true,
+          ),
+          InfoRow(
+            label: 'Region',
+            value: result.region ?? result.regionSlug ?? '—',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            label: 'Continue to create server',
+            icon: Icons.arrow_forward,
+            variant: AppButtonVariant.secondary,
+            onPressed: () => context.push(Routes.createServer),
+          ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.06, end: 0);
   }
 }

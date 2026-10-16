@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/money_formatter.dart';
-import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/models/plan.dart';
 import '../data/order_repository.dart';
 
@@ -56,50 +62,60 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoadingView(message: 'Loading plans…');
           }
           if (snapshot.hasError) {
             final err = snapshot.error;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      err is ApiError ? err.userMessage : 'Could not load plans.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: _reload,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
+            return AppErrorView(
+              message: err is ApiError
+                  ? err.userMessage
+                  : 'Could not load plans.',
+              onRetry: _reload,
             );
           }
           final plans = snapshot.data?.items ?? [];
           if (plans.isEmpty) {
-            return const EmptyState(
+            return AppEmptyState(
               icon: Icons.inventory_2_outlined,
               title: 'No plans available',
               message: 'Check back later for available plans.',
+              actionLabel: 'Retry',
+              onAction: _reload,
             );
           }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.82,
-            ),
-            itemCount: plans.length,
-            itemBuilder: (context, i) => _PlanCard(plan: plans[i]),
+          return CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(
+                child: HeroHeader(
+                  eyebrow: 'Catalog',
+                  title: 'Server plans',
+                  subtitle:
+                      'Pick a plan to configure your server. Prices are billed monthly from your wallet.',
+                  icon: Icons.dns_outlined,
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                ),
+                sliver: SliverGrid(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: AppSpacing.sm,
+                    crossAxisSpacing: AppSpacing.sm,
+                    childAspectRatio: 0.78,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) => _PlanCard(plan: plans[i], index: i),
+                    childCount: plans.length,
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -108,82 +124,97 @@ class _PlansScreenState extends ConsumerState<PlansScreen> {
 }
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan});
+  const _PlanCard({required this.plan, required this.index});
 
   final Plan plan;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final specs = plan.specs;
     final price = plan.priceDisplay ??
         (plan.priceCents != null
             ? MoneyFormatter.fromCents(plan.priceCents!)
             : null);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push(
-          Routes.createServer,
-          extra: {
-            'planSlug': plan.slug,
-            'planName': plan.displayName ?? plan.name,
-          },
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return AppCard(
+      onTap: () => context.push(
+        Routes.createServer,
+        extra: {
+          'planSlug': plan.slug,
+          'planName': plan.displayName ?? plan.name,
+        },
+      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            plan.displayName ?? plan.name,
+            style: AppTypography.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (specs?.vcpuLabel != null)
+            _spec(Icons.memory, specs!.vcpuLabel!),
+          if (specs?.ramLabel != null)
+            _spec(Icons.sd_card_outlined, specs!.ramLabel!),
+          if (specs?.ssdLabel != null)
+            _spec(Icons.storage_outlined, specs!.ssdLabel!),
+          if (specs?.transfer != null)
+            _spec(Icons.swap_vert, specs!.transfer!),
+          const Spacer(),
+          if (price != null) ...[
+            Text(
+              price,
+              style: AppTypography.display.copyWith(
+                fontSize: 22,
+                color: AppColors.accent,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Text('/month', style: AppTypography.caption),
+          ] else
+            const Text('Custom pricing', style: AppTypography.caption),
+          const SizedBox(height: AppSpacing.xxs),
+          Row(
             children: [
               Text(
-                plan.displayName ?? plan.name,
-                style: theme.textTheme.titleMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              if (specs?.vcpuLabel != null)
-                _spec(theme, Icons.memory, specs!.vcpuLabel!),
-              if (specs?.ramLabel != null)
-                _spec(theme, Icons.sd_card_outlined, specs!.ramLabel!),
-              if (specs?.ssdLabel != null)
-                _spec(theme, Icons.storage_outlined, specs!.ssdLabel!),
-              if (specs?.transfer != null)
-                _spec(theme, Icons.swap_vert, specs!.transfer!),
-              const Spacer(),
-              if (price != null)
-                Text(
-                  '$price /mo',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              const SizedBox(height: 4),
-              Text(
                 'Tap to configure',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.arrow_forward,
+                size: 13,
+                color: AppColors.accent,
               ),
             ],
           ),
-        ),
+        ],
       ),
-    );
+    )
+        .animate(delay: (index * 50).ms)
+        .fadeIn(duration: 300.ms)
+        .slideY(begin: 0.06, end: 0);
   }
 
-  Widget _spec(ThemeData theme, IconData icon, String label) {
+  Widget _spec(IconData icon, String label) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 3),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.outline),
+          Icon(icon, size: 14, color: AppColors.textMuted),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               label,
-              style: theme.textTheme.bodySmall,
+              style: AppTypography.caption
+                  .copyWith(color: AppColors.textSecondary),
               overflow: TextOverflow.ellipsis,
             ),
           ),
