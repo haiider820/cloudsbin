@@ -76,7 +76,7 @@ void main() {
     testWidgets('wrong password shows an invalid-password error',
         (tester) async {
       final future = await _openSheet(tester);
-      await tester.enterText(find.byType(TextField), 'wrong-password');
+      await tester.enterText(find.byType(TextFormField), 'wrong-password');
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
       expect(find.text('Invalid password.'), findsOneWidget);
@@ -86,7 +86,7 @@ void main() {
 
     testWidgets('correct password pops the grant', (tester) async {
       final future = await _openSheet(tester);
-      await tester.enterText(find.byType(TextField), 'correct-horse');
+      await tester.enterText(find.byType(TextFormField), 'correct-horse');
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
       expect(await future, 'grant-abc-123');

@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
+import 'app_button.dart';
+
 /// Friendly placeholder for empty lists / not-yet-built screens.
+///
+/// API preserved — existing usages keep working.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
@@ -17,33 +24,67 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: theme.colorScheme.outline),
-            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: AppColors.bg2,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Icon(icon, size: 40, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium,
+              style: AppTypography.title,
             ),
             if (message != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 message!,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.outline),
+                style: AppTypography.bodySecondary,
               ),
             ],
-            if (action != null) ...[const SizedBox(height: 24), action!],
+            if (action != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              action!,
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Convenience: empty state with a labelled action button.
+class EmptyStateAction extends StatelessWidget {
+  const EmptyStateAction({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      label: label,
+      icon: icon,
+      onPressed: onPressed,
+      variant: AppButtonVariant.secondary,
+      fullWidth: false,
     );
   }
 }

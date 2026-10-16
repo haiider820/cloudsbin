@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/theme/app_colors.dart';
 
 /// Global transient-error display via [ScaffoldMessenger].
 ///
@@ -22,8 +23,18 @@ void _show(BuildContext context, String message, {required bool isError}) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              size: 20,
+              color: isError ? AppColors.danger : AppColors.success,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? AppColors.dangerBg : AppColors.bg3,
       ),
     );
 }

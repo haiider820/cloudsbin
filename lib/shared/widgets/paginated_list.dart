@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/theme/app_colors.dart';
 import '../models/paged.dart';
+import 'app_state_widgets.dart';
 import 'empty_state.dart';
 import 'error_snackbar.dart';
 
@@ -10,6 +12,8 @@ typedef ItemBuilder<T> = Widget Function(BuildContext context, T item);
 
 /// Infinite-scroll + pull-to-refresh list over the standard
 /// `{items, page, per_page, total, has_more}` envelope.
+///
+/// Restyled: shimmer loading, branded error view, pull-to-refresh.
 class PaginatedList<T> extends StatefulWidget {
   const PaginatedList({
     super.key,
@@ -99,21 +103,21 @@ class _PaginatedListState<T> extends State<PaginatedList<T>> {
   @override
   Widget build(BuildContext context) {
     if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: AppShimmer(itemCount: 5),
+      );
     }
     if (_items.isEmpty && _error != null) {
-      return EmptyState(
-        icon: Icons.error_outline,
-        title: 'Could not load',
+      return AppErrorView(
         message: _error!.userMessage,
-        action: FilledButton(
-          onPressed: () => _load(reset: true),
-          child: const Text('Retry'),
-        ),
+        onRetry: () => _load(reset: true),
       );
     }
     if (_items.isEmpty) {
       return RefreshIndicator(
+        color: AppColors.accent,
+        backgroundColor: AppColors.bg2,
         onRefresh: () => _load(reset: true),
         child: ListView(
           controller: _controller,
@@ -132,18 +136,26 @@ class _PaginatedListState<T> extends State<PaginatedList<T>> {
     }
 
     return RefreshIndicator(
+      color: AppColors.accent,
+      backgroundColor: AppColors.bg2,
       onRefresh: () => _load(reset: true),
       child: ListView.separated(
         controller: _controller,
         padding: widget.padding,
         itemCount: _items.length + (_hasMore ? 1 : 0),
         separatorBuilder: (context, index) =>
-            widget.separator ?? const SizedBox(height: 8),
+            widget.separator ?? const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (index >= _items.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: SizedBox(
+                  height: 26,
+                  width: 26,
+                  child: CircularProgressIndicator(strokeWidth: 2.6),
+                ),
+              ),
             );
           }
           return widget.itemBuilder(context, _items[index]);

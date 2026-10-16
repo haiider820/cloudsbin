@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'app_button.dart';
+
 /// Filled button that swaps its child for a spinner while [loading] is true
 /// and blocks taps in that state.
+///
+/// API preserved — now rendered through the branded [AppButton].
 class LoadingButton extends StatelessWidget {
   const LoadingButton({
     super.key,
@@ -18,22 +22,12 @@ class LoadingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: loading ? null : onPressed,
-      child: loading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (icon != null) ...[icon!, const SizedBox(width: 8)],
-                child,
-              ],
-            ),
+    final label = child is Text ? (child as Text).data ?? '' : '';
+    return AppButton(
+      label: label.isEmpty ? 'Continue' : label,
+      onPressed: onPressed,
+      loading: loading,
+      icon: icon is Icon ? (icon as Icon).icon : null,
     );
   }
 }

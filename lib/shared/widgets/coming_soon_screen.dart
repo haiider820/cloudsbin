@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
+import 'app_button.dart';
 
-/// Placeholder for routes that arrive in a later phase.
+/// Premium placeholder for routes that arrive in a later phase.
 class ComingSoonScreen extends StatelessWidget {
   const ComingSoonScreen({super.key, required this.title, this.subtitle});
 
@@ -16,26 +20,49 @@ class ComingSoonScreen extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.construction_outlined,
-                size: 56,
-                color: Theme.of(context).colorScheme.outline,
+              Container(
+                padding: const EdgeInsets.all(26),
+                decoration: BoxDecoration(
+                  gradient: AppColors.brandGradient,
+                  shape: BoxShape.circle,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: AppColors.glowCyan,
+                      blurRadius: 40,
+                      spreadRadius: 4,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.rocket_launch_outlined,
+                  size: 44,
+                  color: AppColors.onAccent,
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.lg),
               Text(
-                subtitle ?? 'Coming soon.',
+                title,
                 textAlign: TextAlign.center,
+                style: AppTypography.headline,
               ),
-              const SizedBox(height: 24),
-              OutlinedButton(
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                subtitle ??
+                    'We are putting the finishing touches on this. Check back soon.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySecondary,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Back to home',
+                icon: Icons.home_outlined,
+                variant: AppButtonVariant.secondary,
+                fullWidth: false,
                 onPressed: () => context.go(Routes.home),
-                child: const Text('Back to home'),
               ),
             ],
           ),
