@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../storage/secure_storage.dart';
+import 'logging_interceptor.dart';
 
 /// Attaches `Authorization: Bearer <access_token>` and implements the
 /// 401 recovery contract from FLUTTER_API_GUIDE §2.5:
@@ -94,10 +95,18 @@ class AuthInterceptor extends QueuedInterceptor {
     }
   }
 
-  Future<Response<dynamic>> _retry(RequestOptions options, String accessToken) {
+  Future<Response<dynamic>> _retry(RequestOptions options, String accessToken) async {
     options.extra[_retriedFlag] = true;
     options.headers['Authorization'] = 'Bearer $accessToken';
-    return _client.fetch<dynamic>(options);
+    // Retry on a bare Dio, not [_client]: re-entering this QueuedInterceptor
+    // would serialize the retried request's onError behind this very onError
+    // on the error queue, deadlocking forever when the retry also 401s.
+    // The adapter is shared so DEMO mode and tests keep working; the retry
+    // client is intentionally never closed because the adapter is shared.
+    final retryClient = Dio(_client.options)
+      ..httpClientAdapter = _client.httpClientAdapter
+      ..interceptors.add(LoggingInterceptor());
+    return retryClient.fetch<dynamic>(options);
   }
 
   /// Returns the new access token, or null when refresh is impossible.
