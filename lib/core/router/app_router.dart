@@ -13,6 +13,7 @@ import '../../features/servers/presentation/regenerate_screen.dart';
 import '../../features/servers/presentation/server_detail_screen.dart';
 import '../../features/servers/presentation/server_list_screen.dart';
 import '../../features/servers/presentation/server_usage_screen.dart';
+import '../../features/servers/presentation/whitelist_screen.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
 
@@ -85,7 +86,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           serverId: int.parse(state.pathParameters['id']!),
         ),
       ),
-      _comingSoon(Routes.serverWhitelist, 'IP whitelist'),
+      GoRoute(
+        path: Routes.serverWhitelist,
+        builder: (context, state) => WhitelistScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
       _comingSoon(Routes.serverFirewall, 'Firewall'),
       GoRoute(
         path: Routes.serverCredentials,

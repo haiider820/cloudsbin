@@ -6,6 +6,7 @@ import '../../../core/api/api_error.dart';
 import '../../../shared/enums/app_enums.dart';
 import '../../../shared/models/paged.dart';
 import 'models/credential_reveal.dart';
+import 'models/ip_whitelist.dart';
 import 'models/regenerate_result.dart';
 import 'models/server_detail.dart';
 import 'models/server_refresh_result.dart';
@@ -74,6 +75,57 @@ class ServerRepository {
         },
       );
       return ServerUsage.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `GET /servers/ip-whitelist?id=` (§6.23).
+  Future<IpWhitelistResponse> ipWhitelist(int serverId) async {
+    try {
+      final response = await _client.dio.get<Map<String, dynamic>>(
+        'servers/ip-whitelist',
+        queryParameters: {'id': serverId},
+      );
+      return IpWhitelistResponse.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/ip-whitelist-add` (§6.24). `409 ALREADY_EXISTS` is treated
+  /// as success by the caller.
+  Future<WhitelistAddResult> ipWhitelistAdd({
+    required int serverId,
+    required String cidrOrIp,
+    String? label,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/ip-whitelist-add',
+        data: {
+          'server_id': serverId,
+          'cidr_or_ip': cidrOrIp,
+          if (label != null && label.isNotEmpty) 'label': label,
+        },
+      );
+      return WhitelistAddResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `POST /servers/ip-whitelist-remove` (§6.25).
+  Future<WhitelistRemoveResult> ipWhitelistRemove({
+    required int serverId,
+    required int ruleId,
+  }) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'servers/ip-whitelist-remove',
+        data: {'server_id': serverId, 'rule_id': ruleId},
+      );
+      return WhitelistRemoveResult.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
