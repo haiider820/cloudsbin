@@ -8,6 +8,9 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/servers/presentation/server_detail_screen.dart';
+import '../../features/servers/presentation/server_list_screen.dart';
+import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
 
 /// Single GoRouter instance with an auth-aware redirect.
@@ -63,6 +66,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.home,
         builder: (context, state) => const HomeScreen(),
       ),
+      GoRoute(
+        path: Routes.servers,
+        builder: (context, state) => const ServerListScreen(),
+      ),
+      GoRoute(
+        path: Routes.serverDetail,
+        builder: (context, state) => ServerDetailScreen(
+          serverId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      _comingSoon(Routes.serverUsage, 'Server usage'),
+      _comingSoon(Routes.serverWhitelist, 'IP whitelist'),
+      _comingSoon(Routes.serverFirewall, 'Firewall'),
+      _comingSoon(Routes.serverCredentials, 'Credentials'),
+      _comingSoon(Routes.serverRegenerate, 'Regenerate credentials'),
+      _comingSoon(Routes.serverAccessPort, 'Access port'),
+      _comingSoon(Routes.serverDestroy, 'Destroy server'),
     ],
   );
 });
+
+GoRoute _comingSoon(String path, String title) => GoRoute(
+      path: path,
+      builder: (context, state) => ComingSoonScreen(title: title),
+    );

@@ -38,4 +38,13 @@ class Routes {
   static const String adminDashboard = '/admin/dashboard';
 
   static const String settings = '/settings';
+
+  static String serverDetailPath(int id) => '/servers/$id';
+  static String serverUsagePath(int id) => '/servers/$id/usage';
+  static String serverCredentialsPath(int id) => '/servers/$id/credentials';
+  static String serverRegeneratePath(int id) => '/servers/$id/regenerate';
+  static String serverWhitelistPath(int id) => '/servers/$id/whitelist';
+  static String serverFirewallPath(int id) => '/servers/$id/firewall';
+  static String serverAccessPortPath(int id) => '/servers/$id/access-port';
+  static String serverDestroyPath(int id) => '/servers/$id/destroy';
 }
