@@ -1,11 +1,19 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/idempotency_key.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
-import '../../../shared/widgets/loading_button.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/models/order.dart';
 import '../data/models/plan.dart';
 import '../data/order_repository.dart';
@@ -134,25 +142,37 @@ class _ReceiptUploadScreenState extends ConsumerState<ReceiptUploadScreen> {
     }
   }
 
+  String get _fileSizeLabel {
+    final size = _file?.size ?? 0;
+    if (size >= 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / 1024).toStringAsFixed(0)} KB';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Upload receipt')),
       body: _result != null
           ? _SuccessView(result: _result!)
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
-                Text(
-                  'Paid by bank transfer? Upload the receipt for admin review. No server is provisioned until it is approved.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+                const HeroHeader(
+                  eyebrow: 'Bank transfer',
+                  title: 'Upload receipt',
+                  subtitle:
+                      'Paid by bank transfer? Upload the receipt for admin review. No server is provisioned until it is approved.',
+                  icon: Icons.receipt_long_outlined,
                 ),
-                const SizedBox(height: 16),
+                const SectionHeader(
+                  title: 'Order details',
+                  subtitle: 'What this receipt is for',
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 _loadingPlans
-                    ? const LinearProgressIndicator()
+                    ? const AppShimmer(itemCount: 1, itemHeight: 76)
                     : DropdownButtonFormField<String>(
                         initialValue: _planSlug,
                         decoration:
@@ -166,58 +186,136 @@ class _ReceiptUploadScreenState extends ConsumerState<ReceiptUploadScreen> {
                             .toList(),
                         onChanged: (v) => setState(() => _planSlug = v),
                       ),
-                const SizedBox(height: 16),
-                TextField(
+                const SizedBox(height: AppSpacing.md),
+                AppTextField(
                   controller: _planNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Plan name (optional)',
-                    hintText: 'Defaults to the plan slug',
-                  ),
+                  label: 'Plan name (optional)',
+                  hint: 'Defaults to the plan slug',
+                  prefixIcon: Icons.badge_outlined,
                 ),
-                const SizedBox(height: 16),
-                TextField(
+                const SizedBox(height: AppSpacing.md),
+                AppTextField(
                   controller: _priceController,
+                  label: 'Paid amount (cents)',
+                  hint: 'e.g. 800 for \$8.00',
+                  prefixIcon: Icons.attach_money_outlined,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Paid amount (cents)',
-                    hintText: 'e.g. 800 for \$8.00',
-                  ),
                 ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: _pickFile,
-                  icon: const Icon(Icons.attach_file),
-                  label: Text(_file == null
-                      ? 'Attach receipt (JPG/PNG/WEBP/PDF, ≤5 MB)'
-                      : _file!.name),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(
+                  title: 'Receipt file',
+                  subtitle: 'JPG, PNG, WEBP or PDF · max 5 MB',
                 ),
-                if (_fileError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _fileError!,
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                if (_error != null) ...[
-                  Card(
-                    color: theme.colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        _error!.userMessage,
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
+                const SizedBox(height: AppSpacing.sm),
+                GestureDetector(
+                  onTap: _pickFile,
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: AppColors.bg2,
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(
+                        color: _file == null
+                            ? AppColors.accent.withValues(alpha: 0.45)
+                            : AppColors.success.withValues(alpha: 0.5),
+                        width: 1.5,
                       ),
                     ),
+                    child: _file == null
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent
+                                      .withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.cloud_upload_outlined,
+                                  size: 30,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                              const Text('Tap to attach your receipt',
+                                  style: AppTypography.title),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'JPG, PNG, WEBP or PDF · up to 5 MB',
+                                style: AppTypography.caption,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(
+                                      AppRadius.sm),
+                                ),
+                                child: const Icon(
+                                  Icons.description_outlined,
+                                  size: 26,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _file!.name,
+                                      style: AppTypography.mono,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '$_fileSizeLabel · tap to replace',
+                                      style: AppTypography.caption,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.check_circle_outline,
+                                color: AppColors.success,
+                              ),
+                            ],
+                          ),
                   ),
-                  const SizedBox(height: 8),
+                ).animate().fadeIn(duration: 220.ms),
+                if (_fileError != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    _fileError!,
+                    style: AppTypography.caption
+                        .copyWith(color: AppColors.danger),
+                  ),
                 ],
-                LoadingButton(
+                const SizedBox(height: AppSpacing.lg),
+                if (_error != null) ...[
+                  AppErrorView(
+                    title: 'Upload failed',
+                    message: _error!.userMessage,
+                    onRetry: _submit,
+                    retryLabel: 'Try again',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                AppButton(
+                  label: 'Submit receipt',
+                  icon: Icons.send_outlined,
                   loading: _submitting,
                   onPressed: _submit,
-                  child: const Text('Submit receipt'),
                 ),
               ],
             ),
@@ -232,27 +330,69 @@ class _SuccessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.mark_email_read_outlined,
-                size: 56, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(
-              'Receipt received — request #${result.requestId} is pending review.',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.glowCyan,
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.activeBg,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color:
+                        AppColors.success.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.mark_email_read_outlined,
+                  size: 44,
+                  color: AppColors.success,
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Status: ${result.status.raw}. Nothing is charged or provisioned until an admin approves it.',
-              style: theme.textTheme.bodyMedium,
+            const SizedBox(height: AppSpacing.lg),
+            const Text(
+              'Receipt received',
               textAlign: TextAlign.center,
+              style: AppTypography.headline,
             ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Nothing is charged or provisioned until an admin approves it.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySecondary,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppCard(
+              child: Column(
+                children: [
+                  InfoRow(
+                    label: 'Request',
+                    value: '#${result.requestId}',
+                    mono: true,
+                  ),
+                  InfoRow(
+                    label: 'Status',
+                    value: result.status.raw,
+                    valueColor: AppColors.pendingFg,
+                  ),
+                ],
+              ),
+            ).animate().fadeIn(duration: 240.ms).slideY(begin: 0.05, end: 0),
           ],
         ),
       ),

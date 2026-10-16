@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/router/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/utils/date_formatter.dart';
 import '../../../shared/utils/idempotency_key.dart';
 import '../../../shared/utils/money_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_state_widgets.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
-import '../../../shared/widgets/loading_button.dart';
+import '../../../shared/widgets/hero_header.dart';
 import '../data/crypto_repository.dart';
 import '../data/models/crypto_asset.dart';
 import '../data/models/crypto_checkout.dart';
@@ -109,81 +117,149 @@ class _CryptoCheckoutScreenState extends ConsumerState<CryptoCheckoutScreen> {
     }
   }
 
+  IconData _assetIcon(CryptoAsset a) {
+    final symbol = (a.symbol ?? a.asset).toUpperCase();
+    if (symbol.contains('BTC')) return Icons.currency_bitcoin;
+    if (symbol.contains('ETH')) return Icons.diamond_outlined;
+    if (symbol.contains('USDT') || symbol.contains('USDC')) {
+      return Icons.attach_money_outlined;
+    }
+    return Icons.token_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Pay with crypto')),
       body: _result != null
           ? _CheckoutView(result: _result!)
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
+                const HeroHeader(
+                  eyebrow: 'Crypto payment',
+                  title: 'Pay with crypto',
+                  subtitle:
+                      'Pick an asset and create a checkout — the price is computed server-side.',
+                  icon: Icons.currency_bitcoin_outlined,
+                ),
                 if (_loadingAssets)
-                  const LinearProgressIndicator()
+                  const AppShimmer(itemCount: 3, itemHeight: 76)
                 else if ((_assets?.assets ?? []).isEmpty)
-                  const Text('No crypto assets are enabled right now.')
-                else
-                  DropdownButtonFormField<CryptoAsset>(
-                    initialValue: _asset,
-                    decoration:
-                        const InputDecoration(labelText: 'Crypto asset'),
-                    items: _assets!.assets
-                        .map((a) => DropdownMenuItem(
-                              value: a,
-                              child: Text(
-                                  '${a.label ?? a.asset} (${a.networkName ?? a.network ?? ''})'),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setState(() => _asset = v),
+                  const AppEmptyState(
+                    icon: Icons.currency_bitcoin_outlined,
+                    title: 'No assets available',
+                    message: 'No crypto assets are enabled right now.',
+                  )
+                else ...[
+                  const SectionHeader(
+                    title: 'Crypto asset',
+                    subtitle: 'Choose what you will pay with',
                   ),
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    height: 132,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _assets!.assets.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppSpacing.sm),
+                      itemBuilder: (context, i) {
+                        final a = _assets!.assets[i];
+                        final selected = a == _asset;
+                        return SizedBox(
+                          width: 152,
+                          child: AppCard(
+                            onTap: () => setState(() => _asset = a),
+                            gradientBorder: selected,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(9),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(
+                                        AppRadius.sm),
+                                  ),
+                                  child: Icon(_assetIcon(a),
+                                      size: 22,
+                                      color: selected
+                                          ? AppColors.accent
+                                          : AppColors.textMuted),
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Text(
+                                  a.label ?? a.asset,
+                                  style: AppTypography.title.copyWith(
+                                      fontSize: 15),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  a.networkName ?? a.network ?? '',
+                                  style: AppTypography.caption,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ).animate().fadeIn(duration: 220.ms),
+                        );
+                      },
+                    ),
+                  ),
+                ],
                 if (_assets?.btcRate?.rate != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     'BTC rate: ${MoneyFormatter.usdPkrRate(_assets!.btcRate!.rate)} USD'
                     ' · updated ${DateFormatter.dbToLocal(_assets!.btcRate!.updatedAt?.toIso8601String())}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
+                    style: AppTypography.caption,
                   ),
                 ],
-                const SizedBox(height: 16),
-                TextField(
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(
+                  title: 'Order details',
+                  subtitle: 'What this checkout is for',
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                AppTextField(
                   controller: _planController,
-                  decoration: const InputDecoration(labelText: 'Plan slug'),
+                  label: 'Plan slug',
+                  hint: 'e.g. starter',
+                  prefixIcon: Icons.inventory_2_outlined,
                 ),
-                const SizedBox(height: 16),
-                TextField(
+                const SizedBox(height: AppSpacing.md),
+                AppTextField(
                   controller: _regionController,
-                  decoration: const InputDecoration(labelText: 'Region slug'),
+                  label: 'Region slug',
+                  hint: 'e.g. de-fra1',
+                  prefixIcon: Icons.public_outlined,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpacing.lg),
                 if (_error != null) ...[
-                  Card(
-                    color: theme.colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        _error!.userMessage,
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
+                  AppErrorView(
+                    title: 'Checkout failed',
+                    message: _error!.userMessage,
+                    onRetry: _checkout,
+                    retryLabel: 'Try again',
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.md),
                 ],
-                LoadingButton(
+                AppButton(
+                  label: 'Create checkout',
+                  icon: Icons.add_card_outlined,
                   loading: _submitting,
                   onPressed: _checkout,
-                  child: const Text('Create checkout'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   'The price is computed server-side. Sending crypto creates a pending order — nothing is provisioned until payment is verified.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+                  style: AppTypography.caption,
                 ),
               ],
             ),
@@ -198,47 +274,58 @@ class _CheckoutView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final r = result;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Send exactly', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 4),
-                SelectableText(
-                  MoneyFormatter.crypto(r.amountRequested, r.tokenSymbol ?? r.asset),
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+        const HeroHeader(
+          eyebrow: 'Checkout ready',
+          title: 'Send your payment',
+          subtitle: 'Use the address below to complete this order.',
+          icon: Icons.qr_code_2_outlined,
+        ),
+        AppCard(
+          gradientBorder: true,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SEND EXACTLY', style: AppTypography.sectionEyebrow),
+              const SizedBox(height: AppSpacing.xs),
+              SelectableText(
+                MoneyFormatter.crypto(
+                    r.amountRequested, r.tokenSymbol ?? r.asset),
+                style: AppTypography.display.copyWith(
+                  color: AppColors.accent,
                 ),
-                const SizedBox(height: 16),
-                Text('To this address', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 4),
-                Row(
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text('TO THIS ADDRESS', style: AppTypography.sectionEyebrow),
+              const SizedBox(height: AppSpacing.xs),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.bg0,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Row(
                   children: [
                     Expanded(
                       child: SelectableText(
                         r.walletAddress ?? '—',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontFamily: 'monospace',
-                        ),
+                        style: AppTypography.mono,
                       ),
                     ),
                     IconButton(
                       tooltip: 'Copy address',
-                      icon: const Icon(Icons.copy),
+                      icon: const Icon(Icons.copy_outlined,
+                          size: 20, color: AppColors.accent),
                       onPressed: r.walletAddress == null
                           ? null
                           : () {
-                              Clipboard.setData(
-                                  ClipboardData(text: r.walletAddress!));
+                              Clipboard.setData(ClipboardData(
+                                  text: r.walletAddress!));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                     content: Text('Address copied.')),
@@ -247,26 +334,33 @@ class _CheckoutView extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Network: ${r.networkName ?? r.network ?? '—'}'
-                  '${r.confirmationsRequired != null ? ' · ${r.confirmationsRequired} confirmation(s) required' : ''}',
-                  style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              InfoRow(
+                label: 'Network',
+                value: r.networkName ?? r.network ?? '—',
+              ),
+              if (r.confirmationsRequired != null)
+                InfoRow(
+                  label: 'Confirmations',
+                  value:
+                      '${r.confirmationsRequired} confirmation(s) required',
                 ),
-              ],
-            ),
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-        if (r.expiresInSec != null)
+        ).animate().fadeIn(duration: 240.ms).slideY(begin: 0.05, end: 0),
+        const SizedBox(height: AppSpacing.md),
+        if (r.expiresInSec != null) ...[
           _CountdownCard(seconds: r.expiresInSec!),
-        const SizedBox(height: 12),
-        FilledButton(
+          const SizedBox(height: AppSpacing.md),
+        ],
+        AppButton(
+          label: 'Track payment status',
+          icon: Icons.radar_outlined,
           onPressed: () => context.push(
             Routes.cryptoOrderStatus,
             extra: {'orderId': r.orderId},
           ),
-          child: const Text('Track payment status'),
         ),
       ],
     );
@@ -302,35 +396,31 @@ class _CountdownCardState extends State<_CountdownCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      color: _left > 0
-          ? theme.colorScheme.tertiaryContainer
-          : theme.colorScheme.errorContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(
-              Icons.timer_outlined,
-              color: _left > 0
-                  ? theme.colorScheme.onTertiaryContainer
-                  : theme.colorScheme.onErrorContainer,
+    final active = _left > 0;
+    final tone = active ? AppColors.warning : AppColors.danger;
+    return AppCard(
+      color: tone.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-            Text(
-              _left > 0
+            child: Icon(Icons.timer_outlined, size: 22, color: tone),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              active
                   ? 'Expires in ${DateFormatter.countdown(_left)}'
                   : 'This checkout has expired.',
-              style: TextStyle(
-                color: _left > 0
-                    ? theme.colorScheme.onTertiaryContainer
-                    : theme.colorScheme.onErrorContainer,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppTypography.title
+                  .copyWith(fontSize: 15, color: tone),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
