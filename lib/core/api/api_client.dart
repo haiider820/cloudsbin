@@ -11,7 +11,7 @@ import 'interceptors/logging_interceptor.dart';
 /// Defaults to the live production backend.
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://139.162.17.159/api/v1',
+  defaultValue: 'https://cloudsbin.duckdns.org/api/v1',
 );
 
 /// App version reported via `X-App-Version` (compared to `min_app_version`).
