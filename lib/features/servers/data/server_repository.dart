@@ -10,6 +10,7 @@ import 'models/regenerate_result.dart';
 import 'models/server_detail.dart';
 import 'models/server_refresh_result.dart';
 import 'models/server_summary.dart';
+import 'models/server_usage.dart';
 
 /// Server operations (§6.16–6.29). Sub-resources (usage, whitelist, firewall,
 /// credentials, access-port, destroy) are added in their phases.
@@ -53,6 +54,26 @@ class ServerRepository {
         data: {'server_id': serverId},
       );
       return ServerRefreshResult.fromJson(response.data!);
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// `GET /servers/usage?id=&force=` (§6.19). `force=1` bypasses the 1-hour
+  /// cache; budget 10/300s (spent even on failures), then 429 + Retry-After.
+  Future<ServerUsage> usage({
+    required int serverId,
+    bool force = false,
+  }) async {
+    try {
+      final response = await _client.dio.get<Map<String, dynamic>>(
+        'servers/usage',
+        queryParameters: {
+          'id': serverId,
+          if (force) 'force': 1,
+        },
+      );
+      return ServerUsage.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
