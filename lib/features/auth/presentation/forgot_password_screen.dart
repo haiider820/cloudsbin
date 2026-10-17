@@ -59,6 +59,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e.userMessage);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() =>
+          _error = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

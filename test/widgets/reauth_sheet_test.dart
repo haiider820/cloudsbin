@@ -23,6 +23,9 @@ class _FakeAuthRepository extends AuthRepository {
 
   @override
   Future<String> reauth(String password) async {
+    if (password == 'boom') {
+      throw StateError('unexpected client failure');
+    }
     if (password == 'correct-horse') return 'grant-abc-123';
     throw const ApiError(code: 'FORBIDDEN', message: 'Forbidden');
   }
@@ -91,6 +94,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(await future, 'grant-abc-123');
       expect(find.byType(ReauthSheet), findsNothing);
+    });
+
+    testWidgets(
+        'non-ApiError failure shows a generic error and clears the spinner',
+        (tester) async {
+      final future = await _openSheet(tester);
+      await tester.enterText(find.byType(TextFormField), 'boom');
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.text('Something went wrong. Try again.'), findsOneWidget);
+      // Loading must have been cleared so the sheet is still usable.
+      expect(find.byType(ReauthSheet), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await _dismiss(tester);
+      expect(await future, isNull);
     });
   });
 }

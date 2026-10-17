@@ -16,6 +16,8 @@ import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/hero_header.dart';
 import '../data/auth_repository.dart';
 import '../data/auth_session.dart';
+import '../../admin/data/admin_auth_repository.dart';
+import '../../account/data/account_repository.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -71,9 +73,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             appVersion: ref.read(appVersionProvider),
           );
       if (!mounted) return;
-      ref.read(sessionProvider.notifier).markAuthenticated(
-            email: response.user?.email ?? _emailController.text.trim(),
-          );
+
+      // Resolve the role (the login response may omit `user`; fall back to
+      // /me). Admins must never land in the user app as an "admin user".
+      String role = response.user?.role ?? '';
+      if (role.isEmpty) {
+        try {
+          final me = await ref.read(accountRepositoryProvider).me();
+          role = me.role;
+        } catch (_) {
+          role = 'user';
+        }
+      }
+
+      final email = response.user?.email ?? _emailController.text.trim();
+
+      if (role == 'admin') {
+        // Upgrade to the admin audience: drop any user-audience tokens so
+        // the admin is not also signed in as a "user", then mint admin
+        // tokens and route to the admin portal.
+        final adminDeviceId =
+            await storage.getOrCreateDeviceId(TokenKeys.admin);
+        try {
+          await ref.read(adminAuthRepositoryProvider).login(
+                email: _emailController.text.trim(),
+                password: _passwordController.text,
+                deviceId: adminDeviceId,
+                platform: _platform,
+                appVersion: ref.read(appVersionProvider),
+              );
+        } on ApiError catch (e) {
+          if (!mounted) return;
+          setState(() {
+            if (e.code == 'AUTH_REQUIRED') {
+              _formError = 'Invalid email or password.';
+            } else if (e.code == 'RATE_LIMITED') {
+              final n = e.retryAfterSeconds;
+              _formError = n != null
+                  ? 'Too many attempts. Try again in ${n}s.'
+                  : e.userMessage;
+            } else if (e.code == 'VALIDATION_FAILED') {
+              final msg = e.message.toLowerCase();
+              if (msg.contains('email')) {
+                _emailError = e.message;
+              } else if (msg.contains('password')) {
+                _passwordError = e.message;
+              } else {
+                _formError = e.message;
+              }
+            } else {
+              _formError = e.userMessage;
+            }
+          });
+          return;
+        }
+        await storage.clearTokens(TokenKeys.user);
+        await ref.read(sessionProvider.notifier).logoutLocal();
+        if (!mounted) return;
+        ref.read(adminSessionProvider.notifier).markAuthenticated(email: email);
+        context.go(Routes.adminDashboard);
+        return;
+      }
+
+      ref.read(sessionProvider.notifier).markAuthenticated(email: email);
       // The router redirect reacts to the session change.
     } on ApiError catch (e) {
       if (!mounted) return;
@@ -93,6 +155,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _formError = e.userMessage;
         }
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() =>
+          _formError = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

@@ -50,6 +50,12 @@ class _WhitelistScreenState extends ConsumerState<WhitelistScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -83,6 +89,11 @@ class _WhitelistScreenState extends ConsumerState<WhitelistScreen> {
     } on ApiError catch (e) {
       // A rule that is already gone (404) is effectively removed.
       if (e.code != 'NOT_FOUND' && mounted) showErrorSnackBar(context, e);
+    } catch (_) {
+      if (mounted) {
+        showErrorMessageSnackBar(
+            context, 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) _load();
     }
@@ -289,16 +300,20 @@ class _AddIpDialogState extends ConsumerState<_AddIpDialog> {
         setState(() {
           _cidrError =
               e.message.isNotEmpty ? e.message : 'Invalid IP or CIDR.';
-          _submitting = false;
         });
       } else if (e.code == 'ALREADY_EXISTS') {
         // Treat as success (§6.24).
         showInfoSnackBar(context, 'That IP is already whitelisted.');
         Navigator.pop(context, true);
       } else {
-        setState(() => _submitting = false);
         showErrorSnackBar(context, e);
       }
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

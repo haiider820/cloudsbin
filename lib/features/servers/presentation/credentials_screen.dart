@@ -58,20 +58,22 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
             reauthToken: grant,
           );
       if (!mounted) return;
-      setState(() {
-        _credential = reveal;
-        _busy = false;
-      });
+      setState(() => _credential = reveal);
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e;
-        _busy = false;
-      });
+      setState(() => _error = e);
       // 403 REAUTH_REQUIRED should not normally happen (we always pre-mint).
       if (e.code == 'REAUTH_REQUIRED') {
         showErrorSnackBar(context, e);
       }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

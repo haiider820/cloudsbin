@@ -71,16 +71,18 @@ class _DestroyScreenState extends ConsumerState<DestroyScreen> {
           );
       if (!mounted) return;
       ref.invalidate(serverDetailProvider(widget.serverId));
-      setState(() {
-        _done = true;
-        _busy = false;
-      });
+      setState(() => _done = true);
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e;
-        _busy = false;
-      });
+      setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

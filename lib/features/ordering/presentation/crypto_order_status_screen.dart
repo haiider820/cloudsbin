@@ -68,6 +68,15 @@ class _CryptoOrderStatusScreenState
         _error = e;
         _loading = false;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = const ApiError(
+          code: 'CLIENT_ERROR',
+          message: 'Something went wrong. Please try again.',
+        );
+        _loading = false;
+      });
     }
   }
 

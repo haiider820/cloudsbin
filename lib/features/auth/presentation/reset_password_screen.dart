@@ -61,17 +61,13 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             passwordConfirm: _confirmController.text,
           );
       if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _done = true;
-      });
+      setState(() => _done = true);
       _navigateTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) context.go(Routes.login);
       });
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() {
-        _submitting = false;
         switch (e.code) {
           case 'TOKEN_EXPIRED':
             _terminalMessage = 'This reset link has expired.';
@@ -85,10 +81,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _error = 'Something went wrong. Please try again.';
-      });
+      setState(() => _error = 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

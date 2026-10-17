@@ -65,8 +65,13 @@ class _EstimateScreenState extends ConsumerState<EstimateScreen> {
       });
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _loadingRegions = false);
       showErrorSnackBar(context, e);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loadingRegions = false);
     }
   }
 
@@ -104,6 +109,12 @@ class _EstimateScreenState extends ConsumerState<EstimateScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

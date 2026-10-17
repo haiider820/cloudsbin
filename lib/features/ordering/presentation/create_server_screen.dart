@@ -122,8 +122,13 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
       await _loadImages();
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
       showErrorSnackBar(context, e);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -147,12 +152,16 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
         _images = response.images;
         _image = response.defaultSlug ??
             (response.images.isNotEmpty ? response.images.first.slug : null);
-        _loadingImages = false;
       });
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _loadingImages = false);
       showErrorSnackBar(context, e);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loadingImages = false);
     }
   }
 
@@ -219,6 +228,12 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
         return;
       }
       setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

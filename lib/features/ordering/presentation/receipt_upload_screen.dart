@@ -77,8 +77,13 @@ class _ReceiptUploadScreenState extends ConsumerState<ReceiptUploadScreen> {
       });
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _loadingPlans = false);
       showErrorSnackBar(context, e);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loadingPlans = false);
     }
   }
 
@@ -137,6 +142,12 @@ class _ReceiptUploadScreenState extends ConsumerState<ReceiptUploadScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

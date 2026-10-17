@@ -64,6 +64,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _formError = e.userMessage);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() =>
+          _formError = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

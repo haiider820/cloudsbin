@@ -60,14 +60,17 @@ class _EmailVerificationScreenState
   Future<void> _resend() async {
     if (_sending || _secondsLeft > 0) return;
     setState(() => _sending = true);
-    await ref
-        .read(authRepositoryProvider)
-        .resendVerificationEmail(widget.email);
-    if (!mounted) return;
-    setState(() => _sending = false);
-    // Neutral confirmation regardless of the backend outcome.
-    showInfoSnackBar(context, 'Email sent');
-    _startCooldown();
+    try {
+      await ref
+          .read(authRepositoryProvider)
+          .resendVerificationEmail(widget.email);
+      if (!mounted) return;
+      // Neutral confirmation regardless of the backend outcome.
+      showInfoSnackBar(context, 'Email sent');
+      _startCooldown();
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Future<void> _openEmailApp() async {

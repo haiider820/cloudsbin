@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,8 +33,19 @@ import '../../features/account/presentation/sessions_screen.dart';
 import '../../features/account/presentation/settings_screen.dart';
 import '../../features/admin/presentation/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/admin_login_screen.dart';
+import '../../features/admin/presentation/admin_profile_screen.dart';
+import '../../features/admin/presentation/admin_sessions_screen.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
+
+/// Parses the `:id` path parameter safely. A malformed deep link
+/// (e.g. `/servers/abc`) yields 0 instead of throwing a `FormatException`.
+int _serverIdOf(GoRouterState state) =>
+    int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+
+/// Route-level guard: an invalid or missing server id bounces to the list.
+String? _requireServerId(BuildContext context, GoRouterState state) =>
+    _serverIdOf(state) <= 0 ? Routes.servers : null;
 
 /// Single GoRouter instance with an auth-aware redirect.
 ///
@@ -135,51 +146,51 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.serverDetail,
-        builder: (context, state) => ServerDetailScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            ServerDetailScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverUsage,
-        builder: (context, state) => ServerUsageScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            ServerUsageScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverWhitelist,
-        builder: (context, state) => WhitelistScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            WhitelistScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverFirewall,
-        builder: (context, state) => FirewallScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            FirewallScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverCredentials,
-        builder: (context, state) => CredentialsScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            CredentialsScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverRegenerate,
-        builder: (context, state) => RegenerateScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            RegenerateScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverAccessPort,
-        builder: (context, state) => AccessPortScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            AccessPortScreen(serverId: _serverIdOf(state)),
       ),
       GoRoute(
         path: Routes.serverDestroy,
-        builder: (context, state) => DestroyScreen(
-          serverId: int.parse(state.pathParameters['id']!),
-        ),
+        redirect: _requireServerId,
+        builder: (context, state) =>
+            DestroyScreen(serverId: _serverIdOf(state)),
       ),
       // Ordering (Phase 8).
       GoRoute(
@@ -251,6 +262,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.adminDashboard,
         builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminProfile,
+        builder: (context, state) => const AdminProfileScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminSessions,
+        builder: (context, state) => const AdminSessionsScreen(),
       ),
       // Phase 12 coming-soon stubs (no v1 endpoints yet).
       GoRoute(

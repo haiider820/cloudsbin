@@ -54,6 +54,11 @@ class _AccessPortScreenState extends ConsumerState<AccessPortScreen> {
       });
     } on ApiError catch (e) {
       if (mounted) showErrorSnackBar(context, e);
+    } catch (_) {
+      if (mounted) {
+        showErrorMessageSnackBar(
+            context, 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _loadingCurrent = false);
     }
@@ -74,17 +79,13 @@ class _AccessPortScreenState extends ConsumerState<AccessPortScreen> {
           .read(serverRepositoryProvider)
           .accessPort(serverId: widget.serverId, port: port);
       if (!mounted) return;
-      setState(() {
-        _currentPort = result.newPort ?? port;
-        _submitting = false;
-      });
+      setState(() => _currentPort = result.newPort ?? port);
       showInfoSnackBar(
         context,
         result.message ?? 'Access-port change queued.',
       );
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _submitting = false);
       switch (e.code) {
         case 'SAME_PORT':
           // No-op success: the requested port equals the current one.
@@ -102,6 +103,12 @@ class _AccessPortScreenState extends ConsumerState<AccessPortScreen> {
         default:
           showErrorSnackBar(context, e);
       }
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

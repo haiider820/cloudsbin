@@ -47,17 +47,19 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
     try {
       final paged = await ref.read(accountRepositoryProvider).sessions();
       if (!mounted) return;
-      setState(() {
-        _sessions = paged.items;
-        _loading = false;
-      });
+      setState(() => _sessions = paged.items);
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _loadError = e;
-      });
+      setState(() => _loadError = e);
       showErrorSnackBar(context, e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadError = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -80,6 +82,11 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
       await _load();
     } on ApiError catch (e) {
       if (mounted) showErrorSnackBar(context, e);
+    } catch (_) {
+      if (mounted) {
+        showErrorMessageSnackBar(
+            context, 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _revoking.remove(session.id));
     }
@@ -109,6 +116,11 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
       await ref.read(authRepositoryProvider).logout();
       if (!mounted) return;
       showErrorSnackBar(context, e);
+    } catch (_) {
+      await ref.read(authRepositoryProvider).logout();
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
     } finally {
       await ref.read(sessionProvider.notifier).logoutLocal();
       if (mounted) setState(() => _loggingOutAll = false);

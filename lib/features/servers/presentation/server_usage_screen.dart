@@ -71,6 +71,12 @@ class _ServerUsageScreenState extends ConsumerState<ServerUsageScreen> {
       } else {
         setState(() => _error = e);
       }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

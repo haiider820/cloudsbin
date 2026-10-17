@@ -63,8 +63,12 @@ class _ReauthSheetState extends ConsumerState<ReauthSheet> {
       setState(() {
         // 403 FORBIDDEN = wrong password (§3).
         _error = e.code == 'FORBIDDEN' ? 'Invalid password.' : e.userMessage;
-        _submitting = false;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Something went wrong. Try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

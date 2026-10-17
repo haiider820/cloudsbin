@@ -51,6 +51,12 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = const ApiError(
+            code: 'CLIENT_ERROR',
+            message: 'Something went wrong. Please try again.',
+          ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -84,6 +90,11 @@ class _FirewallScreenState extends ConsumerState<FirewallScreen> {
       if (mounted) showInfoSnackBar(context, 'Rule removed.');
     } on ApiError catch (e) {
       if (e.code != 'NOT_FOUND' && mounted) showErrorSnackBar(context, e);
+    } catch (_) {
+      if (mounted) {
+        showErrorMessageSnackBar(
+            context, 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) _load();
     }
@@ -337,7 +348,6 @@ class _AddRuleDialogState extends ConsumerState<_AddRuleDialog> {
       if (mounted) Navigator.pop(context, true);
     } on ApiError catch (e) {
       if (!mounted) return;
-      setState(() => _submitting = false);
       switch (e.code) {
         case 'ACCESS_PORT_CONFLICT':
           setState(() => _formError = e.message);
@@ -350,6 +360,12 @@ class _AddRuleDialogState extends ConsumerState<_AddRuleDialog> {
         default:
           showErrorSnackBar(context, e);
       }
+    } catch (_) {
+      if (!mounted) return;
+      showErrorMessageSnackBar(
+          context, 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

@@ -42,6 +42,11 @@ class _ServerDetailScreenState extends ConsumerState<ServerDetailScreen> {
       if (mounted) showInfoSnackBar(context, 'Synced with provider.');
     } on ApiError catch (e) {
       if (mounted) showErrorSnackBar(context, e);
+    } catch (_) {
+      if (mounted) {
+        showErrorMessageSnackBar(
+            context, 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
