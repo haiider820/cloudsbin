@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import '../../../shared/enums/app_enums.dart';
 import '../../../shared/models/paged.dart';
 import 'models/credential_reveal.dart';
@@ -30,9 +31,9 @@ class ServerRepository {
         'servers/list',
         queryParameters: {'page': page, 'per_page': perPage},
       );
-      return Paged.fromJson<ServerSummary>(
-        response.data!,
-        ServerSummary.fromJson,
+      return parseResponse(
+        response,
+        (json) => Paged.fromJson<ServerSummary>(json, ServerSummary.fromJson),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -45,7 +46,7 @@ class ServerRepository {
         'servers/detail',
         queryParameters: {'id': serverId},
       );
-      return ServerDetail.fromJson(response.data!);
+      return parseResponse(response, ServerDetail.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -58,7 +59,7 @@ class ServerRepository {
         'servers/refresh',
         data: {'server_id': serverId},
       );
-      return ServerRefreshResult.fromJson(response.data!);
+      return parseResponse(response, ServerRefreshResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -78,7 +79,7 @@ class ServerRepository {
           if (force) 'force': 1,
         },
       );
-      return ServerUsage.fromJson(response.data!);
+      return parseResponse(response, ServerUsage.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -96,7 +97,7 @@ class ServerRepository {
         data: {'server_id': serverId, 'confirm': true},
         options: Options(headers: {'X-Reauth-Token': reauthToken}),
       );
-      return DestroyResult.fromJson(response.data!);
+      return parseResponse(response, DestroyResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -112,7 +113,7 @@ class ServerRepository {
         'servers/access-port',
         data: {'server_id': serverId, 'port': port},
       );
-      return AccessPortResult.fromJson(response.data!);
+      return parseResponse(response, AccessPortResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -131,7 +132,7 @@ class ServerRepository {
         'servers/power',
         data: {'server_id': serverId, 'action': action.name},
       );
-      return PowerResponse.fromJson(response.data!);
+      return parseResponse(response, PowerResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -144,7 +145,7 @@ class ServerRepository {
         'servers/firewall',
         queryParameters: {'id': serverId},
       );
-      return FirewallResponse.fromJson(response.data!);
+      return parseResponse(response, FirewallResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -175,7 +176,7 @@ class ServerRepository {
             'description': description,
         },
       );
-      return FirewallAddResult.fromJson(response.data!);
+      return parseResponse(response, FirewallAddResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -191,7 +192,7 @@ class ServerRepository {
         'servers/firewall-remove',
         data: {'server_id': serverId, 'rule_id': ruleId},
       );
-      return FirewallRemoveResult.fromJson(response.data!);
+      return parseResponse(response, FirewallRemoveResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -204,7 +205,7 @@ class ServerRepository {
         'servers/ip-whitelist',
         queryParameters: {'id': serverId},
       );
-      return IpWhitelistResponse.fromJson(response.data!);
+      return parseResponse(response, IpWhitelistResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -226,7 +227,7 @@ class ServerRepository {
           if (label != null && label.isNotEmpty) 'label': label,
         },
       );
-      return WhitelistAddResult.fromJson(response.data!);
+      return parseResponse(response, WhitelistAddResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -242,7 +243,7 @@ class ServerRepository {
         'servers/ip-whitelist-remove',
         data: {'server_id': serverId, 'rule_id': ruleId},
       );
-      return WhitelistRemoveResult.fromJson(response.data!);
+      return parseResponse(response, WhitelistRemoveResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -261,7 +262,7 @@ class ServerRepository {
         data: {'server_id': serverId, 'auth_type': authType.raw},
         options: Options(headers: {'X-Reauth-Token': reauthToken}),
       );
-      return CredentialReveal.fromJson(response.data!);
+      return parseResponse(response, CredentialReveal.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -278,7 +279,7 @@ class ServerRepository {
         data: {'server_id': serverId},
         options: Options(headers: {'X-Reauth-Token': reauthToken}),
       );
-      return RegenerateResult.fromJson(response.data!);
+      return parseResponse(response, RegenerateResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

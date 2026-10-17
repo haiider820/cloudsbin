@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import '../../../core/storage/secure_storage.dart';
 import 'models/auth_user.dart';
 import 'models/device_info.dart';
@@ -41,7 +42,7 @@ class AuthRepository {
           ),
         ).toJson(),
       );
-      final parsed = LoginResponse.fromJson(response.data!);
+      final parsed = parseResponse(response, LoginResponse.fromJson);
       await _storage.writeTokens(
         TokenKeys.user,
         accessToken: parsed.accessToken,
@@ -73,7 +74,7 @@ class AuthRepository {
           ref: referralCode,
         ).toJson(),
       );
-      return MessageResponse.fromJson(response.data!);
+      return parseResponse(response, MessageResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -86,7 +87,7 @@ class AuthRepository {
         'auth/password-forgot',
         data: {'email': email},
       );
-      return MessageResponse.fromJson(response.data!);
+      return parseResponse(response, MessageResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -145,6 +146,27 @@ class AuthRepository {
     }
   }
 
+  /// `POST /auth/password-change` — self-service password change for a
+  /// signed-in user. 403 `FORBIDDEN` means the current password is wrong.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String password,
+    required String passwordConfirm,
+  }) async {
+    try {
+      await _client.dio.post<Map<String, dynamic>>(
+        'auth/password-change',
+        data: {
+          'current_password': currentPassword,
+          'password': password,
+          'password_confirm': passwordConfirm,
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _client.dio.post<Map<String, dynamic>>('auth/logout');
@@ -174,7 +196,7 @@ class AuthRepository {
         'auth/refresh',
         data: {'refresh_token': refreshToken},
       );
-      final pair = TokenPair.fromJson(response.data!);
+      final pair = parseResponse(response, TokenPair.fromJson);
       await _storage.writeTokens(
         TokenKeys.user,
         accessToken: pair.accessToken,
@@ -211,7 +233,7 @@ class AuthRepository {
   Future<AuthUser> me() async {
     try {
       final response = await _client.dio.get<Map<String, dynamic>>('me');
-      return AuthUser.fromJson(response.data!);
+      return parseResponse(response, AuthUser.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

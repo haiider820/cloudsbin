@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import 'models/home_summary.dart';
 
 /// Dashboard summary (§6.10).
@@ -14,7 +15,7 @@ class HomeRepository {
   Future<HomeSummary> summary() async {
     try {
       final response = await _client.dio.get<Map<String, dynamic>>('home');
-      return HomeSummary.fromJson(response.data!);
+      return parseResponse(response, HomeSummary.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

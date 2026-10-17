@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import '../../../shared/utils/idempotency_key.dart';
 import 'models/crypto_asset.dart';
 import 'models/crypto_checkout.dart';
@@ -22,7 +23,7 @@ class CryptoRepository {
     try {
       final response =
           await _client.dio.get<Map<String, dynamic>>('crypto/assets');
-      return CryptoAssetsResponse.fromJson(response.data!);
+      return parseResponse(response, CryptoAssetsResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -60,7 +61,7 @@ class CryptoRepository {
           },
           options: Options(headers: {'Idempotency-Key': key}),
         );
-        return CryptoCheckoutResult.fromJson(response.data!);
+        return parseResponse(response, CryptoCheckoutResult.fromJson);
       } on DioException catch (e) {
         final apiError = ApiError.fromDio(e);
         if (apiError.code == 'IDEMPOTENCY_MISMATCH' && attempt == 0) {
@@ -83,7 +84,7 @@ class CryptoRepository {
         'crypto/order',
         queryParameters: {'order': orderId},
       );
-      return CryptoOrder.fromJson(response.data!);
+      return parseResponse(response, CryptoOrder.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }

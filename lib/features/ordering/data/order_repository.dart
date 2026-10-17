@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import '../../../shared/models/paged.dart';
 import '../../../shared/utils/idempotency_key.dart';
 import 'models/cloud_image.dart';
@@ -28,7 +29,7 @@ class OrderRepository {
     try {
       final response =
           await _client.dio.get<Map<String, dynamic>>('plans/list');
-      return PlansResponse.fromJson(response.data!);
+      return parseResponse(response, PlansResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -38,7 +39,10 @@ class OrderRepository {
     try {
       final response =
           await _client.dio.get<Map<String, dynamic>>('regions/list');
-      return Paged.fromJson<Region>(response.data!, Region.fromJson);
+      return parseResponse(
+        response,
+        (json) => Paged.fromJson<Region>(json, Region.fromJson),
+      );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -58,7 +62,7 @@ class OrderRepository {
           if (region != null && region.isNotEmpty) 'region': region,
         },
       );
-      return ImagesResponse.fromJson(response.data!);
+      return parseResponse(response, ImagesResponse.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -81,7 +85,7 @@ class OrderRepository {
           'region': region,
         },
       );
-      return EstimateResult.fromJson(response.data!);
+      return parseResponse(response, EstimateResult.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -116,7 +120,7 @@ class OrderRepository {
           },
           options: Options(headers: {'Idempotency-Key': key}),
         );
-        return ServerCreateResult.fromJson(response.data!);
+        return parseResponse(response, ServerCreateResult.fromJson);
       } on DioException catch (e) {
         final apiError = ApiError.fromDio(e);
         if (apiError.code == 'IDEMPOTENCY_MISMATCH' && attempt == 0) {
@@ -138,7 +142,10 @@ class OrderRepository {
         'orders/list',
         queryParameters: {'page': page, 'per_page': perPage},
       );
-      return Paged.fromJson<OrderItem>(response.data!, OrderItem.fromJson);
+      return parseResponse(
+        response,
+        (json) => Paged.fromJson<OrderItem>(json, OrderItem.fromJson),
+      );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -179,7 +186,7 @@ class OrderRepository {
           data: form,
           options: Options(headers: {'Idempotency-Key': key}),
         );
-        return ReceiptResult.fromJson(response.data!);
+        return parseResponse(response, ReceiptResult.fromJson);
       } on DioException catch (e) {
         final apiError = ApiError.fromDio(e);
         if (apiError.code == 'IDEMPOTENCY_MISMATCH' && attempt == 0) {

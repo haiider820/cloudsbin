@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_error.dart';
+import '../../../core/api/response_parser.dart';
 import '../../../shared/models/paged.dart';
 import 'models/auth_session_info.dart';
 import 'models/user_profile.dart';
@@ -16,7 +17,7 @@ class AccountRepository {
   Future<UserProfile> me() async {
     try {
       final response = await _client.dio.get<Map<String, dynamic>>('me');
-      return UserProfile.fromJson(response.data!);
+      return parseResponse(response, UserProfile.fromJson);
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
     }
@@ -26,9 +27,9 @@ class AccountRepository {
     try {
       final response =
           await _client.dio.get<Map<String, dynamic>>('auth/sessions');
-      return Paged.fromJson<AuthSessionInfo>(
-        response.data!,
-        AuthSessionInfo.fromJson,
+      return parseResponse(
+        response,
+        (json) => Paged.fromJson<AuthSessionInfo>(json, AuthSessionInfo.fromJson),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);

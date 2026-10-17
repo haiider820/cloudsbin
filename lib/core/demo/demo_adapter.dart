@@ -124,13 +124,21 @@ class DemoAdapter implements HttpClientAdapter {
     }
 
     // Auth + account.
+    // Admin audience first — its fixtures must never fall through to the
+    // user payloads (an admin dashboard showing the demo *user* was a bug).
+    if (_ends(path, '/admin/auth/login')) return _ok(_adminLogin);
+    if (_ends(path, '/admin/auth/reauth')) return _ok(_adminReauth);
+    if (_ends(path, '/admin/auth/sessions')) return _ok(_adminSessions);
+    if (_ends(path, '/admin/auth/logout-all')) return _ok({'revoked': 1});
+    if (_ends(path, '/admin/me')) return _ok(_adminUser);
+
     if (_ends(path, '/auth/reauth')) {
       return _ok({
         'reauth_token': 'demo-reauth-grant',
         'expires_at': '2026-10-16T10:09:08Z',
       });
     }
-    if (_ends(path, '/auth/login') || _ends(path, '/admin/auth/login')) {
+    if (_ends(path, '/auth/login')) {
       return _ok(_login);
     }
     if (_ends(path, '/auth/refresh')) {
@@ -150,6 +158,7 @@ class DemoAdapter implements HttpClientAdapter {
       // Demo always verifies instantly; the fake token is accepted.
       return _ok({'verified': true});
     }
+    if (_ends(path, '/auth/password-change')) return _ok({'changed': true});
     if (_ends(path, '/auth/password-reset')) return _ok({'reset': true});
     if (_ends(path, '/auth/register') || _ends(path, '/auth/password-forgot')) {
       return _DemoResponse(202, {
@@ -157,7 +166,7 @@ class DemoAdapter implements HttpClientAdapter {
             'If this email is not already registered, the account has been created.'
       });
     }
-    if (_ends(path, '/me') || _ends(path, '/admin/me')) return _ok(_user);
+    if (_ends(path, '/me')) return _ok(_user);
     if (_ends(path, '/home')) return _ok(_home);
 
     // Ordering (Phase 8).
@@ -279,6 +288,48 @@ class DemoAdapter implements HttpClientAdapter {
     'refresh_token': 'demo-refresh-token',
     'refresh_expires_at': '2026-11-15T10:04:07Z',
     'user': _user,
+  };
+
+  // ---- Admin audience fixtures --------------------------------------------
+
+  static const Map<String, dynamic> _adminUser = {
+    'id': 900001,
+    'email': 'demo-admin@cloudsbin.local',
+    'role': 'admin',
+    'created_at': '2025-01-01T00:00:00Z',
+    'referral_code': null,
+  };
+
+  static const Map<String, dynamic> _adminLogin = {
+    'access_token': 'demo-admin-access-token',
+    'access_expires_at': '2099-12-31T23:59:59Z',
+    'refresh_token': 'demo-admin-refresh-token',
+    'refresh_expires_at': '2099-12-31T23:59:59Z',
+    'user': _adminUser,
+  };
+
+  static const Map<String, dynamic> _adminReauth = {
+    'reauth_token': 'demo-admin-reauth-token',
+    'expires_at': '2099-12-31T23:59:59Z',
+  };
+
+  static const Map<String, dynamic> _adminSessions = {
+    'items': [
+      {
+        'id': 1,
+        'device_name': 'Demo Admin Device',
+        'platform': 'android',
+        'app_version': '1.0.0',
+        'last_used_at': '2026-10-16T10:04:05Z',
+        'last_ip': '127.0.0.1',
+        'created_at': '2026-10-16T10:04:05Z',
+        'current': true,
+      },
+    ],
+    'page': 1,
+    'per_page': 25,
+    'total': 1,
+    'has_more': false,
   };
 
   static const Map<String, dynamic> _home = {
