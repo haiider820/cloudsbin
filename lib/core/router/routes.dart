@@ -39,6 +39,8 @@ class Routes {
 
   static const String adminLogin = '/admin/login';
   static const String adminDashboard = '/admin/dashboard';
+  static const String adminProfile = '/admin/profile';
+  static const String adminSessions = '/admin/sessions';
 
   static const String settings = '/settings';
 

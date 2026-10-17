@@ -34,6 +34,12 @@ class AppColors {
   static const Color accentViolet = Color(0xFFA78BFA);
   static const Color onAccent = Color(0xFF04222B);
 
+  // ── Admin portal accent ────────────────────────────────────────────────
+  /// Deep purple identity for everything behind the admin sign-in wall —
+  /// deliberately distinct from the cyan user-app accent.
+  static const Color adminAccent = Color(0xFF7C3AED);
+  static const Color adminAccentLight = Color(0xFFEDE9FE);
+
   /// Signature brand gradient (cyan → violet).
   static const LinearGradient brandGradient = LinearGradient(
     colors: [Color(0xFF22D3EE), Color(0xFFA78BFA)],

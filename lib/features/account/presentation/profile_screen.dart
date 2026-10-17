@@ -128,6 +128,43 @@ class _ProfileBody extends StatelessWidget {
           variant: AppButtonVariant.secondary,
           onPressed: () => context.push(Routes.sessions),
         ),
+        if (profile.role == 'admin') ...[
+          const SizedBox(height: AppSpacing.lg),
+          const SectionHeader(
+            title: 'Administration',
+            subtitle: 'Staff access',
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppCard(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.adminAccent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(
+                    color: AppColors.adminAccent.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.admin_panel_settings_outlined,
+                  color: AppColors.adminAccentLight,
+                  size: 22,
+                ),
+              ),
+              title: const Text('Admin Portal'),
+              subtitle: const Text('Manage CloudsBin'),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppColors.textMuted,
+              ),
+              onTap: () => context.push(Routes.adminLogin),
+            ),
+          ),
+        ],
       ],
     );
   }

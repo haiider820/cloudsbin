@@ -18,6 +18,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.fullWidth = true,
     this.dense = false,
+    this.color,
   });
 
   final String label;
@@ -27,6 +28,10 @@ class AppButton extends StatelessWidget {
   final IconData? icon;
   final bool fullWidth;
   final bool dense;
+
+  /// Filled-background override (primary variant) — lets themed surfaces
+  /// (e.g. the admin portal's purple) reuse the same button.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +67,18 @@ class AppButton extends StatelessWidget {
     final button = switch (variant) {
       AppButtonVariant.primary => FilledButton(
           onPressed: loading ? null : onPressed,
-          style: style,
+          style: color == null
+              ? style
+              : style?.copyWith(
+                  backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                      states.contains(WidgetState.disabled)
+                          ? AppColors.bg3
+                          : color),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                      states.contains(WidgetState.disabled)
+                          ? AppColors.textMuted
+                          : Colors.white),
+                ),
           child: child,
         ),
       AppButtonVariant.secondary => OutlinedButton(

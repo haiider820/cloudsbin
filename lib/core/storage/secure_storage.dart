@@ -7,19 +7,29 @@ import 'package:uuid/uuid.dart';
 /// Tokens for the user app and the admin app live under separate keys so a
 /// single install can hold both audiences without cross-contamination.
 class TokenKeys {
-  const TokenKeys({required this.access, required this.refresh});
+  const TokenKeys({
+    required this.access,
+    required this.refresh,
+    required this.device,
+  });
 
   final String access;
   final String refresh;
 
+  /// Per-audience stable install UUID key, so an admin login never reuses
+  /// the user app's `device_id` entry (and vice versa).
+  final String device;
+
   static const TokenKeys user = TokenKeys(
     access: 'access_token',
     refresh: 'refresh_token',
+    device: 'device_id',
   );
 
   static const TokenKeys admin = TokenKeys(
     access: 'admin_access_token',
     refresh: 'admin_refresh_token',
+    device: 'admin_device_id',
   );
 }
 
@@ -33,8 +43,6 @@ class SecureStorage {
   SecureStorage(this._storage);
 
   final FlutterSecureStorage _storage;
-
-  static const String _deviceIdKey = 'device_id';
 
   Future<String?> readAccessToken(TokenKeys keys) => _storage.read(key: keys.access);
 
@@ -54,13 +62,14 @@ class SecureStorage {
     await _storage.delete(key: keys.refresh);
   }
 
-  /// Returns the stable per-install device UUID, generating + persisting one
-  /// on first call. Matches `device.id` (stable install UUID) in §2.2.
-  Future<String> getOrCreateDeviceId() async {
-    final existing = await _storage.read(key: _deviceIdKey);
+  /// Returns the stable per-install device UUID for the given audience,
+  /// generating + persisting one on first call. Matches `device.id` (stable
+  /// install UUID) in §2.2. Defaults to the user audience's `device_id`.
+  Future<String> getOrCreateDeviceId([TokenKeys keys = TokenKeys.user]) async {
+    final existing = await _storage.read(key: keys.device);
     if (existing != null && existing.isNotEmpty) return existing;
     final created = const Uuid().v4();
-    await _storage.write(key: _deviceIdKey, value: created);
+    await _storage.write(key: keys.device, value: created);
     return created;
   }
 }

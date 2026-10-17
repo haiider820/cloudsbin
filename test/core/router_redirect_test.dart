@@ -11,6 +11,8 @@ import 'package:cloudsbin/core/storage/secure_storage.dart';
 import 'package:cloudsbin/features/admin/data/admin_auth_repository.dart';
 import 'package:cloudsbin/features/admin/presentation/admin_dashboard_screen.dart';
 import 'package:cloudsbin/features/admin/presentation/admin_login_screen.dart';
+import 'package:cloudsbin/features/admin/presentation/admin_profile_screen.dart';
+import 'package:cloudsbin/features/admin/presentation/admin_sessions_screen.dart';
 import 'package:cloudsbin/features/auth/data/auth_session.dart';
 import 'package:cloudsbin/features/auth/presentation/login_screen.dart';
 import 'package:cloudsbin/features/auth/presentation/splash_screen.dart';
@@ -184,6 +186,57 @@ void main() {
       await _settle(tester);
       expect(find.byType(AdminDashboardScreen), findsOneWidget);
       expect(find.byType(AdminLoginScreen), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets(
+        'unauthenticated admin deep-links on the new admin routes land '
+        'on the admin login', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(
+            user: SessionStatus.authenticated,
+            admin: SessionStatus.unauthenticated,
+          ),
+          child: const _App(),
+        ),
+      );
+      await _settle(tester);
+      expect(find.byType(HomeScreen), findsOneWidget);
+
+      _router(tester).go(Routes.adminProfile);
+      await _settle(tester);
+      expect(find.byType(AdminLoginScreen), findsOneWidget);
+      expect(find.byType(AdminProfileScreen), findsNothing);
+
+      _router(tester).go(Routes.adminSessions);
+      await _settle(tester);
+      expect(find.byType(AdminLoginScreen), findsOneWidget);
+      expect(find.byType(AdminSessionsScreen), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('authenticated admin reaches profile and sessions',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(
+            user: SessionStatus.unauthenticated,
+            admin: SessionStatus.authenticated,
+          ),
+          child: const _App(),
+        ),
+      );
+      await _settle(tester);
+      expect(find.byType(LoginScreen), findsOneWidget);
+
+      _router(tester).go(Routes.adminProfile);
+      await _settle(tester);
+      expect(find.byType(AdminProfileScreen), findsOneWidget);
+
+      _router(tester).go(Routes.adminSessions);
+      await _settle(tester);
+      expect(find.byType(AdminSessionsScreen), findsOneWidget);
       await _unmount(tester);
     });
   });

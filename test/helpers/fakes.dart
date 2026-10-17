@@ -91,11 +91,11 @@ class MemorySecureStorage extends SecureStorage {
   }
 
   @override
-  Future<String> getOrCreateDeviceId() async {
-    final existing = values['device_id'];
+  Future<String> getOrCreateDeviceId([TokenKeys keys = TokenKeys.user]) async {
+    final existing = values[keys.device];
     if (existing != null && existing.isNotEmpty) return existing;
     const created = 'test-device-id';
-    values['device_id'] = created;
+    values[keys.device] = created;
     return created;
   }
 }

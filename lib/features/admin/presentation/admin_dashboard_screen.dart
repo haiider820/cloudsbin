@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_error.dart';
+import '../../../core/router/routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/utils/date_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_dialog.dart';
 import '../../../shared/widgets/app_state_widgets.dart';
-import '../../../shared/widgets/hero_header.dart';
 import '../../auth/data/auth_session.dart';
 import '../data/admin_auth_repository.dart';
+import '../data/models/admin_profile.dart';
 
-/// Phase 11 — admin shell. The v1 docs expose admin auth + `/admin/me` but
-/// no management endpoints, so the dashboard stays an honest stub: identity
-/// card, the v1 limitation note, and all-sessions logout — now in the
-/// premium dark tokens.
+/// Admin home. Identity comes from `/admin/me` only — the v1 API has no
+/// management endpoints, so every section renders as a visible, locked
+/// "coming soon" entry (zero user data anywhere on this screen).
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -27,6 +29,42 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
+  late Future<AdminProfile> _future;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref.read(adminAuthRepositoryProvider).getProfile();
+  }
+
+  void _retry() {
+    setState(() {
+      _future = ref.read(adminAuthRepositoryProvider).getProfile();
+    });
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Log out?',
+      message: 'End this admin session on this device.',
+      confirmLabel: 'Log out',
+      danger: true,
+      icon: Icons.logout_outlined,
+    );
+    if (!confirmed) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(adminAuthRepositoryProvider).logout();
+      await ref.read(adminSessionProvider.notifier).logoutLocal();
+      if (!mounted) return;
+      context.go(Routes.login);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _logoutAll() async {
     final confirmed = await confirmDialog(
       context,
@@ -35,171 +73,339 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           'This ends every admin session on every device. You will need to sign in again.',
       confirmLabel: 'Log out',
       danger: true,
-      icon: Icons.logout_outlined,
+      icon: Icons.devices_outlined,
     );
     if (!confirmed) return;
-    await ref.read(adminAuthRepositoryProvider).logoutAll();
-    await ref.read(adminSessionProvider.notifier).logoutLocal();
+    setState(() => _busy = true);
+    try {
+      await ref.read(adminAuthRepositoryProvider).logoutAll();
+      await ref.read(adminSessionProvider.notifier).logoutLocal();
+      if (!mounted) return;
+      context.go(Routes.login);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg0,
-      appBar: AppBar(
-        title: const Text('Admin'),
-        actions: [
-          IconButton(
-            tooltip: 'Log out',
-            icon: const Icon(Icons.logout_outlined),
-            onPressed: _logoutAll,
-          ),
-        ],
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: ref.read(adminAuthRepositoryProvider).me(),
+      appBar: AppBar(title: const Text('CloudsBin Admin')),
+      body: FutureBuilder<AdminProfile>(
+        future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const AppLoadingView(
-              message: 'Loading admin session…',
+            return ListView(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              children: const [
+                AppShimmer(itemCount: 4, itemHeight: 108),
+              ],
             );
           }
           if (snapshot.hasError) {
-            final error = snapshot.error!;
-            return AppErrorView(
-              message: error is ApiError
-                  ? error.userMessage
-                  : error.toString(),
-              onRetry: () => setState(() {}),
+            return _buildBody(
+              profile: null,
+              loadError: snapshot.error!,
+              onRetry: _retry,
             );
           }
-
-          final me = snapshot.data;
-          final email = me?['email']?.toString() ?? 'Admin';
-          final role = me?['role']?.toString() ?? 'admin';
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              0,
-              AppSpacing.lg,
-              AppSpacing.xl,
-            ),
-            children: [
-              HeroHeader(
-                eyebrow: 'Administration',
-                title: 'Admin Console',
-                subtitle: 'Signed in as $email',
-                icon: Icons.admin_panel_settings_outlined,
-              )
-                  .animate()
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.05, end: 0, curve: Curves.easeOut),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: AppSpacing.sm,
-                crossAxisSpacing: AppSpacing.sm,
-                childAspectRatio: 1.4,
-                children: [
-                  StatTile(
-                    icon: Icons.badge_outlined,
-                    label: 'Role',
-                    value: role,
-                    accentColor: AppColors.accentViolet,
-                  ),
-                  const StatTile(
-                    icon: Icons.verified_user_outlined,
-                    label: 'Audience',
-                    value: 'Admin',
-                    accentColor: AppColors.success,
-                  ),
-                ],
-              )
-                  .animate(delay: 80.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.05, end: 0, curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.lg),
-              const SectionHeader(
-                title: 'Session',
-                subtitle: 'Current admin session details',
-                icon: Icons.key_outlined,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              AppCard(
-                gradientBorder: true,
-                child: Column(
-                  children: [
-                    InfoRow(
-                      label: 'Email',
-                      value: email,
-                      mono: true,
-                    ),
-                    const Divider(height: 1),
-                    InfoRow(
-                      label: 'Role',
-                      value: role,
-                      valueColor: AppColors.accentViolet,
-                    ),
-                    const Divider(height: 1),
-                    const InfoRow(
-                      label: 'Audience',
-                      value: 'Admin',
-                      valueColor: AppColors.success,
-                    ),
-                  ],
-                ),
-              )
-                  .animate(delay: 140.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.05, end: 0, curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.lg),
-              const SectionHeader(
-                title: 'Management',
-                subtitle: 'Available in a later phase',
-                icon: Icons.dashboard_customize_outlined,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              AppCard(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.info_outline,
-                      size: 20,
-                      color: AppColors.info,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Management endpoints are not in the v1 API yet. '
-                        'Admins can sign in, refresh and sign out; '
-                        'dashboards, user management and top-up approvals '
-                        'arrive in a later phase.',
-                        style: AppTypography.bodySecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-                  .animate(delay: 200.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.05, end: 0, curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.lg),
-              AppButton(
-                label: 'Log out (all sessions)',
-                icon: Icons.logout_outlined,
-                variant: AppButtonVariant.danger,
-                onPressed: _logoutAll,
-              )
-                  .animate(delay: 260.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.05, end: 0, curve: Curves.easeOut),
-            ],
+          return _buildBody(
+            profile: snapshot.data!,
+            loadError: null,
+            onRetry: _retry,
           );
         },
       ),
+    );
+  }
+
+  Widget _buildBody({
+    required AdminProfile? profile,
+    required Object? loadError,
+    required VoidCallback onRetry,
+  }) {
+    final sessionEmail = ref.read(adminSessionProvider).email;
+    final email = profile?.email ?? sessionEmail ?? 'Administrator';
+    final memberSince = DateFormatter.isoToLocal(
+      profile?.createdAt?.toIso8601String(),
+    );
+
+    return ListView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      children: [
+        AppCard(
+          gradientBorder: true,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.adminAccent,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.adminAccent.withValues(alpha: 0.4),
+                          blurRadius: 24,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.admin_panel_settings_outlined,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                email,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.title,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            const _AdminBadge(),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Member since: $memberSince',
+                          style: AppTypography.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (loadError != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerBg,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(
+                      color: AppColors.danger.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 18,
+                        color: AppColors.dangerFg,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Could not load admin profile. '
+                          '${loadError is ApiError ? loadError.userMessage : ''}',
+                          style: AppTypography.caption
+                              .copyWith(color: AppColors.dangerFg),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'View Profile',
+                      icon: Icons.badge_outlined,
+                      variant: AppButtonVariant.secondary,
+                      dense: true,
+                      onPressed: () => context.push(Routes.adminProfile),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: AppButton(
+                      label: 'My Sessions',
+                      icon: Icons.devices_outlined,
+                      variant: AppButtonVariant.secondary,
+                      dense: true,
+                      onPressed: () => context.push(Routes.adminSessions),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        )
+            .animate()
+            .fadeIn(duration: 300.ms)
+            .slideY(begin: 0.06, end: 0),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionHeader(
+          title: 'Management',
+          subtitle: 'API Coming Soon',
+          icon: Icons.dashboard_customize_outlined,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        AppCard(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: Column(
+            children: [
+              const _LockedTile(
+                title: 'Dashboard',
+                description: 'Overview of the CloudsBin platform',
+              ),
+              const _LockedTile(
+                title: 'Users',
+                description: 'Manage accounts, roles, and access',
+              ),
+              const _LockedTile(
+                title: 'Servers',
+                description: 'Provision and manage VPS instances',
+              ),
+              const _LockedTile(
+                title: 'Orders & Top-ups',
+                description: 'Review orders and manual top-up receipts',
+              ),
+              const _LockedTile(
+                title: 'Wallet',
+                description: 'Balances, withdrawals, and transactions',
+              ),
+              const _LockedTile(
+                title: 'Support',
+                description: 'Tickets and customer requests',
+                showDivider: false,
+              ),
+            ],
+          ),
+        )
+            .animate(delay: 80.ms)
+            .fadeIn(duration: 300.ms)
+            .slideY(begin: 0.06, end: 0),
+        const SizedBox(height: AppSpacing.lg),
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Log out',
+                icon: Icons.logout_outlined,
+                variant: AppButtonVariant.secondary,
+                onPressed: _busy ? null : _logout,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: AppButton(
+                label: 'Log out all',
+                icon: Icons.devices_outlined,
+                variant: AppButtonVariant.danger,
+                loading: _busy,
+                onPressed: _busy ? null : _logoutAll,
+              ),
+            ),
+          ],
+        )
+            .animate(delay: 140.ms)
+            .fadeIn(duration: 300.ms),
+        const SizedBox(height: AppSpacing.md),
+      ],
+    );
+  }
+}
+
+class _AdminBadge extends StatelessWidget {
+  const _AdminBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.adminAccent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
+          color: AppColors.adminAccent.withValues(alpha: 0.55),
+        ),
+      ),
+      child: const Text(
+        'ADMIN',
+        style: TextStyle(
+          color: AppColors.adminAccentLight,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _LockedTile extends StatelessWidget {
+  const _LockedTile({
+    required this.title,
+    required this.description,
+    this.showDivider = true,
+  });
+
+  final String title;
+  final String description;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          enabled: false,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: 2,
+          ),
+          leading: const Icon(
+            Icons.lock_outline,
+            size: 20,
+            color: AppColors.textMuted,
+          ),
+          title: Text(
+            title,
+            style: AppTypography.title.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 15.5,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 2),
+              Text(description, style: AppTypography.caption),
+              const SizedBox(height: 2),
+              Text(
+                'Backend v1 endpoints coming soon',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textMuted,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, indent: AppSpacing.md, endIndent: AppSpacing.md),
+      ],
     );
   }
 }
