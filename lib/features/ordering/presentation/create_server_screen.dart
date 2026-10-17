@@ -16,6 +16,7 @@ import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/error_snackbar.dart';
 import '../../../shared/widgets/hero_header.dart';
+import '../../../shared/widgets/info_card.dart';
 import '../data/models/cloud_image.dart';
 import '../data/models/plan.dart';
 import '../data/models/server_create_result.dart';
@@ -411,10 +412,18 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _sshController,
-                label: 'SSH public key (optional)',
-                hint: 'ssh-ed25519 AAAA…',
+                label: 'SSH Public Key (optional)',
+                hint: 'Leave empty to use root password authentication',
                 prefixIcon: Icons.key_outlined,
                 maxLines: 2,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const InfoCard(
+                icon: Icons.info_outline,
+                text: "If you don't provide an SSH key, your server "
+                    "will use root password authentication. "
+                    "You can retrieve credentials after provisioning "
+                    "from the server detail screen.",
               ),
               const SizedBox(height: AppSpacing.sm),
               AppCard(
