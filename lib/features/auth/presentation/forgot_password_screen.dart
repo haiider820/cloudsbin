@@ -49,11 +49,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
     setState(() => _submitting = true);
     try {
-      final result = await ref
+      await ref
           .read(authRepositoryProvider)
           .forgotPassword(_emailController.text.trim());
       if (!mounted) return;
-      setState(() => _message = result.message);
+      // Neutral copy: never reveals whether the address is registered.
+      setState(() => _message = 'If that email is registered, you\'ll receive '
+          'a password reset link shortly. Check your inbox and spam folder.');
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e.userMessage);

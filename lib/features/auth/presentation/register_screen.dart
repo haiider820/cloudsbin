@@ -10,7 +10,6 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
-import '../../../shared/widgets/error_snackbar.dart';
 import '../../../shared/widgets/hero_header.dart';
 import '../data/auth_repository.dart';
 
@@ -59,8 +58,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             acceptTerms: _acceptTerms,
           );
       if (!mounted) return;
-      showInfoSnackBar(context, 'Account created, please sign in.');
-      context.go(Routes.login);
+      context.go(
+        Routes.emailVerificationSentPath(_emailController.text.trim()),
+      );
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _formError = e.userMessage);

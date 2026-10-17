@@ -146,6 +146,11 @@ class DemoAdapter implements HttpClientAdapter {
     if (_ends(path, '/auth/logout-all')) return _ok({'revoked': 3});
     if (_ends(path, '/auth/sessions')) return _ok(_sessions);
     if (_ends(path, '/auth/sessions-revoke')) return _ok({'revoked': true});
+    if (_ends(path, '/auth/verify-email')) {
+      // Demo always verifies instantly; the fake token is accepted.
+      return _ok({'verified': true});
+    }
+    if (_ends(path, '/auth/password-reset')) return _ok({'reset': true});
     if (_ends(path, '/auth/register') || _ends(path, '/auth/password-forgot')) {
       return _DemoResponse(202, {
         'message':

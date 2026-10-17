@@ -6,6 +6,9 @@ class Routes {
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
+  static const String emailVerificationSent = '/email-verification-sent';
+  static const String verifyEmail = '/verify-email';
+  static const String resetPassword = '/reset-password';
 
   static const String home = '/home';
 
@@ -46,6 +49,18 @@ class Routes {
   static const String tickets = '/support/tickets';
   static const String notificationsList = '/notifications';
   static const String terminal = '/terminal';
+
+  /// `/email-verification-sent?email=...` - the "check your inbox" screen.
+  static String emailVerificationSentPath(String email) =>
+      '/email-verification-sent?email=${Uri.encodeQueryComponent(email)}';
+
+  /// `/verify-email?token=...` - reached via the email link.
+  static String verifyEmailPath(String token) =>
+      '/verify-email?token=${Uri.encodeQueryComponent(token)}';
+
+  /// `/reset-password?token=...` - reached via the reset email link.
+  static String resetPasswordPath(String token) =>
+      '/reset-password?token=${Uri.encodeQueryComponent(token)}';
 
   static String serverDetailPath(int id) => '/servers/$id';
   static String serverUsagePath(int id) => '/servers/$id/usage';

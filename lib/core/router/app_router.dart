@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/data/auth_session.dart';
+import '../../features/auth/presentation/email_verification_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
+import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/auth/presentation/verify_email_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/servers/presentation/access_port_screen.dart';
 import '../../features/servers/presentation/credentials_screen.dart';
@@ -55,6 +58,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onAuthScreen = location == Routes.login ||
           location == Routes.register ||
           location == Routes.forgotPassword;
+      // Deep-link / post-register screens stay reachable while signed out
+      // (and while signed in, so an email link is never silently dropped).
+      final onPublicLink = location == Routes.emailVerificationSent ||
+          location == Routes.verifyEmail ||
+          location == Routes.resetPassword;
       final onSplash = location == Routes.splash;
       final onAdmin = location.startsWith('/admin');
 
@@ -74,9 +82,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       switch (status) {
         case SessionStatus.unknown:
-          return onSplash ? null : Routes.splash;
+          return (onSplash || onPublicLink) ? null : Routes.splash;
         case SessionStatus.unauthenticated:
-          return onAuthScreen ? null : Routes.login;
+          return (onAuthScreen || onPublicLink) ? null : Routes.login;
         case SessionStatus.authenticated:
           if (onAuthScreen || onSplash) return Routes.home;
           return null;
@@ -98,6 +106,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: Routes.emailVerificationSent,
+        builder: (context, state) => EmailVerificationScreen(
+          email: state.uri.queryParameters['email'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: Routes.verifyEmail,
+        builder: (context, state) => VerifyEmailScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: Routes.resetPassword,
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
       ),
       GoRoute(
         path: Routes.home,

@@ -92,6 +92,59 @@ class AuthRepository {
     }
   }
 
+  /// Best-effort re-request of the verification email.
+  ///
+  /// The v1 contract re-triggers the verification mail by re-hitting
+  /// `auth/register`; the caller always treats this as "sent" (neutral
+  /// messaging, never reveals whether the address exists).
+  Future<void> resendVerificationEmail(String email) async {
+    try {
+      await _client.dio.post<Map<String, dynamic>>(
+        'auth/register',
+        data: {'email': email},
+      );
+    } on DioException {
+      // Intentionally swallowed: resend always reports success to the user.
+    }
+  }
+
+  /// Consumes an email-verification token from a deep link.
+  ///
+  /// 200 means the address is now verified; 404/410 throw an [ApiError] with
+  /// `TOKEN_INVALID`, `TOKEN_EXPIRED` or `TOKEN_USED`.
+  Future<void> verifyEmail(String token) async {
+    try {
+      await _client.dio.post<Map<String, dynamic>>(
+        'auth/verify-email',
+        data: {'token': token},
+      );
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
+  /// Consumes a password-reset token from a deep link and sets a new password.
+  ///
+  /// 200 means the password was reset; 400/404/410 throw an [ApiError].
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+    required String passwordConfirm,
+  }) async {
+    try {
+      await _client.dio.post<Map<String, dynamic>>(
+        'auth/password-reset',
+        data: {
+          'token': token,
+          'password': password,
+          'password_confirm': passwordConfirm,
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _client.dio.post<Map<String, dynamic>>('auth/logout');
