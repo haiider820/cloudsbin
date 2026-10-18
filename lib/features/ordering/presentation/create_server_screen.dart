@@ -59,6 +59,10 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
   bool _autoscale = false;
   bool _customSpecs = false;
 
+  /// 400 `INVALID_REGION` — shown inline under the region selector, not as a
+  /// snackbar. Cleared whenever the plan or region changes.
+  String? _regionError;
+
   ServerCreateResult? _result;
   ApiError? _error;
 
@@ -171,12 +175,16 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
       _customSpecs = slug == 'custom';
       final regions = _regionsForPlan;
       _region = regions.isNotEmpty ? regions.first : null;
+      _regionError = null;
     });
     _loadImages();
   }
 
   void _selectRegion(String? slug) {
-    setState(() => _region = slug);
+    setState(() {
+      _region = slug;
+      _regionError = null;
+    });
     _loadImages();
   }
 
@@ -204,6 +212,7 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
     setState(() {
       _submitting = true;
       _error = null;
+      _regionError = null;
       _result = null;
     });
     try {
@@ -225,6 +234,14 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
       if (e.code == 'INSUFFICIENT_BALANCE') {
         // 402 → (stub) top-up screen.
         if (mounted) context.push(Routes.walletTopup);
+        return;
+      }
+      if (e.code == 'INVALID_REGION') {
+        // 400 INVALID_REGION — the plan+region combo is not offered. Show it
+        // inline under the region selector rather than as a snackbar.
+        setState(() => _regionError =
+            'This plan is not available in the selected region. '
+            'Please choose a different region.');
         return;
       }
       setState(() => _error = e);
@@ -351,6 +368,25 @@ class _CreateServerScreenState extends ConsumerState<CreateServerScreen> {
                         ))
                     .toList(),
               ),
+              if (_regionError != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 16, color: AppColors.danger),
+                    const SizedBox(width: AppSpacing.xxs),
+                    Expanded(
+                      child: Text(
+                        _regionError!,
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               if (_customSpecs) ...[
                 const SectionHeader(
