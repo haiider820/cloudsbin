@@ -138,5 +138,61 @@ void main() {
       expect((body['items'] as List), hasLength(2));
       expect(body['usd_pkr_rate'], 282.5);
     });
+
+    test('admin/dashboard returns platform counters', () async {
+      final (status, body) = await _call(_adapter(), 'GET', '/admin/dashboard');
+
+      expect(status, 200);
+      expect((body['users'] as Map)['total'], 150);
+      expect((body['servers'] as Map)['total'], 89);
+      expect((body['orders'] as Map)['pending'], 5);
+      expect((body['revenue'] as Map)['this_month_usd'], '1250.00');
+    });
+
+    test('admin/servers/detail stays admin-only (no /servers/detail collision)',
+        () async {
+      final (status, body) = await _call(
+        _adapter(),
+        'GET',
+        '/admin/servers/detail',
+        query: {'server_id': '9206568'},
+      );
+
+      expect(status, 200);
+      // The admin payload carries owner + provider, unlike the user detail.
+      expect(body['user_email'], 'demo-user@cloudsbin.local');
+      expect(body['provider_slug'], 'linode');
+    });
+
+    test('admin lists return the seeded rows', () async {
+      final (_, users) = await _call(_adapter(), 'GET', '/admin/users');
+      expect((users['items'] as List), hasLength(5));
+
+      final (_, servers) = await _call(_adapter(), 'GET', '/admin/servers');
+      expect((servers['items'] as List), hasLength(5));
+
+      final (_, tickets) = await _call(_adapter(), 'GET', '/admin/tickets');
+      expect((tickets['items'] as List), hasLength(4));
+    });
+
+    test('admin actions answer 200', () async {
+      final (approve, approveBody) = await _call(
+        _adapter(),
+        'POST',
+        '/admin/orders/approve',
+        data: {'order_id': 4205},
+      );
+      expect(approve, 200);
+      expect(approveBody['message'], isNotEmpty);
+
+      final (send, sendBody) = await _call(
+        _adapter(),
+        'POST',
+        '/admin/notifications/send',
+        data: const {},
+      );
+      expect(send, 200);
+      expect(sendBody['recipient_count'], 150);
+    });
   });
 }
