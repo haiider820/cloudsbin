@@ -33,8 +33,18 @@ import '../../features/account/presentation/sessions_screen.dart';
 import '../../features/account/presentation/settings_screen.dart';
 import '../../features/admin/presentation/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/admin_login_screen.dart';
+import '../../features/admin/presentation/admin_notifications_screen.dart';
+import '../../features/admin/presentation/admin_orders_screen.dart';
 import '../../features/admin/presentation/admin_profile_screen.dart';
+import '../../features/admin/presentation/admin_server_detail_screen.dart';
+import '../../features/admin/presentation/admin_servers_screen.dart';
 import '../../features/admin/presentation/admin_sessions_screen.dart';
+import '../../features/admin/presentation/admin_ticket_detail_screen.dart';
+import '../../features/admin/presentation/admin_tickets_screen.dart';
+import '../../features/admin/presentation/admin_topups_screen.dart';
+import '../../features/admin/presentation/admin_user_detail_screen.dart';
+import '../../features/admin/presentation/admin_users_screen.dart';
+import '../../features/admin/presentation/admin_withdrawals_screen.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import 'routes.dart';
 
@@ -270,6 +280,52 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.adminSessions,
         builder: (context, state) => const AdminSessionsScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminUsers,
+        builder: (context, state) => const AdminUsersScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminUserDetail,
+        builder: (context, state) => AdminUserDetailScreen(
+          userId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminServers,
+        builder: (context, state) => const AdminServersScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminServerDetail,
+        builder: (context, state) => AdminServerDetailScreen(
+          serverId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminOrders,
+        builder: (context, state) => const AdminOrdersScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminTopups,
+        builder: (context, state) => const AdminTopupsScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminWithdrawals,
+        builder: (context, state) => const AdminWithdrawalsScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminTickets,
+        builder: (context, state) => const AdminTicketsScreen(),
+      ),
+      GoRoute(
+        path: Routes.adminTicketDetail,
+        builder: (context, state) => AdminTicketDetailScreen(
+          ticketId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminNotifications,
+        builder: (context, state) => const AdminNotificationsScreen(),
       ),
       // Phase 12 coming-soon stubs (no v1 endpoints yet).
       GoRoute(

@@ -47,6 +47,67 @@ class DemoAdapter implements HttpClientAdapter {
   }
 
   _DemoResponse _route(String method, String path, RequestOptions options) {
+    // Admin management first — `/admin/servers/detail` would otherwise match
+    // the generic `/servers/detail` rule below and leak the user payload.
+    if (_ends(path, '/admin/dashboard')) return _ok(_adminDashboard);
+    if (_ends(path, '/admin/users/detail')) return _ok(_adminUserDetail);
+    if (_ends(path, '/admin/users/toggle-active')) {
+      return _ok({'message': 'User status updated.'});
+    }
+    if (_ends(path, '/admin/users/change-role')) {
+      return _ok({'message': 'User role updated.'});
+    }
+    if (_ends(path, '/admin/users/adjust-wallet')) {
+      return _ok({'message': 'Wallet adjusted.'});
+    }
+    if (_ends(path, '/admin/users')) return _ok(_adminUsersList);
+    if (_ends(path, '/admin/servers/detail')) return _ok(_adminServerDetail);
+    if (_ends(path, '/admin/servers/force-destroy')) {
+      return _ok({'message': 'Server force-destroyed.'});
+    }
+    if (_ends(path, '/admin/servers/force-refresh')) {
+      return _ok({'message': 'Server refreshed.'});
+    }
+    if (_ends(path, '/admin/servers')) return _ok(_adminServersList);
+    if (_ends(path, '/admin/orders/approve')) {
+      return _ok({'message': 'Order approved.'});
+    }
+    if (_ends(path, '/admin/orders/reject')) {
+      return _ok({'message': 'Order rejected.'});
+    }
+    if (_ends(path, '/admin/orders')) return _ok(_adminOrdersList);
+    if (_ends(path, '/admin/topups/approve')) {
+      return _ok({'message': 'Top-up approved.'});
+    }
+    if (_ends(path, '/admin/topups/reject')) {
+      return _ok({'message': 'Top-up rejected.'});
+    }
+    if (_ends(path, '/admin/topups')) return _ok(_adminTopupsList);
+    if (_ends(path, '/admin/withdrawals/approve')) {
+      return _ok({'message': 'Withdrawal approved.'});
+    }
+    if (_ends(path, '/admin/withdrawals/reject')) {
+      return _ok({'message': 'Withdrawal rejected.'});
+    }
+    if (_ends(path, '/admin/withdrawals')) return _ok(_adminWithdrawalsList);
+    if (_ends(path, '/admin/tickets/detail')) return _ok(_adminTicketDetail);
+    if (_ends(path, '/admin/tickets/reply')) {
+      return _ok({'message': 'Reply sent.'});
+    }
+    if (_ends(path, '/admin/tickets/close')) {
+      return _ok({'message': 'Ticket closed.'});
+    }
+    if (_ends(path, '/admin/tickets/set-priority')) {
+      return _ok({'message': 'Priority updated.'});
+    }
+    if (_ends(path, '/admin/tickets')) return _ok(_adminTicketsList);
+    if (_ends(path, '/admin/notifications/send')) {
+      return _ok({'message': 'Notification sent.', 'recipient_count': 150});
+    }
+    if (_ends(path, '/admin/notifications/history')) {
+      return _ok(_adminNotificationsList);
+    }
+
     // Server sub-resources first (more specific paths).
     if (_ends(path, '/servers/power')) return _power(options);
     if (_ends(path, '/servers/ip-whitelist')) return _ok(_ipWhitelist);
@@ -642,6 +703,381 @@ class DemoAdapter implements HttpClientAdapter {
     ],
     'page': 1,
     'per_page': 25,
+    'total': 2,
+    'has_more': false,
+  };
+
+  // ---- Admin management fixtures ------------------------------------------
+
+  static const Map<String, dynamic> _adminDashboard = {
+    'users': {'total': 150, 'new_today': 3, 'new_this_month': 45},
+    'servers': {'total': 89, 'active': 67, 'provisioning': 2, 'destroyed': 20},
+    'orders': {'pending': 5, 'total_this_month': 34},
+    'revenue': {'today_usd': '45.00', 'this_month_usd': '1250.00'},
+    'tickets': {'open': 8, 'unread': 3},
+    'topups': {'pending_count': 2, 'pending_amount_usd': '75.00'},
+  };
+
+  static const Map<String, dynamic> _adminUsersList = {
+    'items': [
+      {
+        'id': 900152,
+        'email': 'demo-user@cloudsbin.local',
+        'role': 'user',
+        'created_at': '2026-10-12T08:18:39Z',
+        'wallet_balance_usd': '84.00',
+        'server_count': 3,
+        'is_active': true,
+        'last_login_at': '2026-10-16T10:04:05Z',
+      },
+      {
+        'id': 900153,
+        'email': 'sara.k@example.com',
+        'role': 'user',
+        'created_at': '2026-09-30T12:00:00Z',
+        'wallet_balance_usd': '12.50',
+        'server_count': 1,
+        'is_active': true,
+        'last_login_at': '2026-10-15T18:22:00Z',
+      },
+      {
+        'id': 900154,
+        'email': 'banned@example.com',
+        'role': 'user',
+        'created_at': '2026-08-21T09:10:00Z',
+        'wallet_balance_usd': '0.00',
+        'server_count': 0,
+        'is_active': false,
+        'last_login_at': '2026-09-01T07:45:00Z',
+      },
+      {
+        'id': 900155,
+        'email': 'ops@cloudsbin.local',
+        'role': 'admin',
+        'created_at': '2026-07-01T00:00:00Z',
+        'wallet_balance_usd': '0.00',
+        'server_count': 2,
+        'is_active': true,
+        'last_login_at': '2026-10-16T09:00:00Z',
+      },
+      {
+        'id': 900156,
+        'email': 'bilal@example.com',
+        'role': 'user',
+        'created_at': '2026-10-01T14:30:00Z',
+        'wallet_balance_usd': '250.00',
+        'server_count': 5,
+        'is_active': true,
+        'last_login_at': '2026-10-16T08:12:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 5,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminUserDetail = {
+    'id': 900152,
+    'email': 'demo-user@cloudsbin.local',
+    'role': 'user',
+    'created_at': '2026-10-12T08:18:39Z',
+    'wallet_balance_usd': '84.00',
+    'server_count': 3,
+    'is_active': true,
+    'last_login_at': '2026-10-16T10:04:05Z',
+    'lifetime_spent_usd': '310.75',
+    'ticket_count': 4,
+    'referral_code': 'A2FAAA6E',
+    'referred_by_user_id': null,
+    'last_login_ip': '203.0.113.9',
+  };
+
+  static const Map<String, dynamic> _adminServersList = {
+    'items': [
+      {
+        'id': 9206568,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'status': 'active',
+        'plan_name': 'nano',
+        'region': 'us-east',
+        'ip_address': '203.0.113.10',
+        'created_at': '2026-10-16T10:04:04Z',
+        'provider_slug': 'linode',
+      },
+      {
+        'id': 9206569,
+        'user_id': 900153,
+        'user_email': 'sara.k@example.com',
+        'status': 'provisioning',
+        'plan_name': 'starter',
+        'region': 'europe',
+        'ip_address': null,
+        'created_at': '2026-10-16T10:10:00Z',
+        'provider_slug': 'aws',
+      },
+      {
+        'id': 9206570,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'status': 'active',
+        'plan_name': 'standard-1',
+        'region': 'us-west',
+        'ip_address': '198.51.100.42',
+        'created_at': '2026-10-05T08:00:00Z',
+        'provider_slug': 'digitalocean',
+      },
+      {
+        'id': 9206571,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'status': 'destroyed',
+        'plan_name': null,
+        'region': 'us-west',
+        'ip_address': null,
+        'created_at': '2026-10-01T08:00:00Z',
+        'provider_slug': 'digitalocean',
+      },
+      {
+        'id': 9206572,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'status': 'offline',
+        'plan_name': 'nano',
+        'region': 'us-east',
+        'ip_address': '203.0.113.55',
+        'created_at': '2026-10-14T11:00:00Z',
+        'provider_slug': 'linode',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 5,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminServerDetail = {
+    'id': 9206568,
+    'user_id': 900152,
+    'user_email': 'demo-user@cloudsbin.local',
+    'status': 'active',
+    'plan_name': 'nano',
+    'region': 'us-east',
+    'ip_address': '203.0.113.10',
+    'created_at': '2026-10-16T10:04:04Z',
+    'provider_slug': 'linode',
+  };
+
+  static const Map<String, dynamic> _adminOrdersList = {
+    'items': [
+      {
+        'id': 4205,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'status': 'pending',
+        'plan_name': 'Standard 1',
+        'total_cents': 575,
+        'has_receipt': true,
+        'receipt_url': 'https://example.com/receipts/4205.png',
+        'admin_note': null,
+        'created_at': '2026-10-16T10:24:00Z',
+      },
+      {
+        'id': 4206,
+        'user_id': 900153,
+        'user_email': 'sara.k@example.com',
+        'status': 'pending',
+        'plan_name': 'Standard 2',
+        'total_cents': 2400,
+        'has_receipt': false,
+        'receipt_url': null,
+        'admin_note': null,
+        'created_at': '2026-10-16T11:02:00Z',
+      },
+      {
+        'id': 4207,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'status': 'pending',
+        'plan_name': 'Standard 1',
+        'total_cents': 575,
+        'has_receipt': true,
+        'receipt_url': 'https://example.com/receipts/4207.png',
+        'admin_note': null,
+        'created_at': '2026-10-16T11:30:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 3,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminTopupsList = {
+    'items': [
+      {
+        'id': 7781,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'amount_usd': '50.00',
+        'method': 'bank_transfer',
+        'status': 'pending',
+        'receipt_url': 'https://example.com/topups/7781.jpg',
+        'created_at': '2026-10-16T09:12:00Z',
+      },
+      {
+        'id': 7782,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'amount_usd': '25.00',
+        'method': 'easypaisa',
+        'status': 'pending',
+        'receipt_url': 'https://example.com/topups/7782.jpg',
+        'created_at': '2026-10-16T10:45:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 2,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminWithdrawalsList = {
+    'items': [
+      {
+        'id': 3310,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'amount_usd': '120.00',
+        'method': 'bank_transfer',
+        'account_details': 'HBL 1234-5678-9012 · Bilal Khan',
+        'status': 'pending',
+        'created_at': '2026-10-16T08:30:00Z',
+      },
+      {
+        'id': 3311,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'amount_usd': '40.00',
+        'method': 'jazzcash',
+        'account_details': '0300-1234567',
+        'status': 'pending',
+        'created_at': '2026-10-16T09:55:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 2,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminTicketsList = {
+    'items': [
+      {
+        'id': 501,
+        'user_id': 900152,
+        'user_email': 'demo-user@cloudsbin.local',
+        'subject': 'Cannot SSH into my server',
+        'status': 'open',
+        'priority': 'urgent',
+        'last_reply_at': '2026-10-16T10:30:00Z',
+        'unread_count': 2,
+        'created_at': '2026-10-16T09:00:00Z',
+      },
+      {
+        'id': 502,
+        'user_id': 900153,
+        'user_email': 'sara.k@example.com',
+        'subject': 'Billing question',
+        'status': 'open',
+        'priority': 'normal',
+        'last_reply_at': '2026-10-16T10:05:00Z',
+        'unread_count': 1,
+        'created_at': '2026-10-15T14:00:00Z',
+      },
+      {
+        'id': 503,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'subject': 'Upgrade plan',
+        'status': 'closed',
+        'priority': 'low',
+        'last_reply_at': '2026-10-14T11:00:00Z',
+        'unread_count': 0,
+        'created_at': '2026-10-13T08:00:00Z',
+      },
+      {
+        'id': 504,
+        'user_id': 900156,
+        'user_email': 'bilal@example.com',
+        'subject': 'Refund request',
+        'status': 'closed',
+        'priority': 'high',
+        'last_reply_at': '2026-10-12T16:00:00Z',
+        'unread_count': 0,
+        'created_at': '2026-10-11T10:00:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
+    'total': 4,
+    'has_more': false,
+  };
+
+  static const Map<String, dynamic> _adminTicketDetail = {
+    'id': 501,
+    'user_id': 900152,
+    'user_email': 'demo-user@cloudsbin.local',
+    'subject': 'Cannot SSH into my server',
+    'status': 'open',
+    'priority': 'urgent',
+    'last_reply_at': '2026-10-16T10:30:00Z',
+    'unread_count': 2,
+    'created_at': '2026-10-16T09:00:00Z',
+    'messages': [
+      {
+        'id': 9001,
+        'sender': 'user',
+        'message': 'Hi, I cannot connect via SSH since this morning.',
+        'created_at': '2026-10-16T09:00:00Z',
+      },
+      {
+        'id': 9002,
+        'sender': 'admin',
+        'message': 'Thanks for reaching out — checking your firewall rules now.',
+        'created_at': '2026-10-16T09:15:00Z',
+      },
+      {
+        'id': 9003,
+        'sender': 'user',
+        'message': 'Still timing out on port 22.',
+        'created_at': '2026-10-16T10:30:00Z',
+      },
+    ],
+  };
+
+  static const Map<String, dynamic> _adminNotificationsList = {
+    'items': [
+      {
+        'id': 61,
+        'title': 'Scheduled maintenance',
+        'message': 'We will perform maintenance on 2026-10-20 from 02:00–04:00 UTC.',
+        'target': 'all',
+        'recipient_count': 150,
+        'sent_at': '2026-10-15T09:00:00Z',
+      },
+      {
+        'id': 62,
+        'title': 'Wallet credited',
+        'message': 'Your top-up of \$50.00 has been approved.',
+        'target': 'user',
+        'recipient_count': 1,
+        'sent_at': '2026-10-16T09:20:00Z',
+      },
+    ],
+    'page': 1,
+    'per_page': 20,
     'total': 2,
     'has_more': false,
   };

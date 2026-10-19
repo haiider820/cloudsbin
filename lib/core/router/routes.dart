@@ -41,6 +41,16 @@ class Routes {
   static const String adminDashboard = '/admin/dashboard';
   static const String adminProfile = '/admin/profile';
   static const String adminSessions = '/admin/sessions';
+  static const String adminUsers = '/admin/users';
+  static const String adminUserDetail = '/admin/users/:id';
+  static const String adminServers = '/admin/servers';
+  static const String adminServerDetail = '/admin/servers/:id';
+  static const String adminOrders = '/admin/orders';
+  static const String adminTopups = '/admin/topups';
+  static const String adminWithdrawals = '/admin/withdrawals';
+  static const String adminTickets = '/admin/tickets';
+  static const String adminTicketDetail = '/admin/tickets/:id';
+  static const String adminNotifications = '/admin/notifications';
 
   static const String settings = '/settings';
 
@@ -72,4 +82,8 @@ class Routes {
   static String serverFirewallPath(int id) => '/servers/$id/firewall';
   static String serverAccessPortPath(int id) => '/servers/$id/access-port';
   static String serverDestroyPath(int id) => '/servers/$id/destroy';
+
+  static String adminUserDetailPath(int id) => '/admin/users/$id';
+  static String adminServerDetailPath(int id) => '/admin/servers/$id';
+  static String adminTicketDetailPath(int id) => '/admin/tickets/$id';
 }
