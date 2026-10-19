@@ -214,53 +214,93 @@ Future<String?> adminTextPrompt(
   bool required = true,
   bool danger = false,
 }) {
-  final controller = TextEditingController();
   return showDialog<String>(
     context: context,
-    builder: (context) {
-      String? error;
-      return StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          backgroundColor: AppColors.bg1,
-          title: Text(title),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            minLines: 1,
-            decoration: InputDecoration(
-              hintText: hint,
-              errorText: error,
-            ),
-          ),
-          actions: [
-            AppButton(
-              label: cancelLabel,
-              variant: AppButtonVariant.secondary,
-              dense: true,
-              fullWidth: false,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            AppButton(
-              label: confirmLabel,
-              variant:
-                  danger ? AppButtonVariant.danger : AppButtonVariant.primary,
-              dense: true,
-              fullWidth: false,
-              onPressed: () {
-                final text = controller.text.trim();
-                if (required && text.isEmpty) {
-                  setState(() => error = 'This field is required.');
-                  return;
-                }
-                Navigator.of(context).pop(text);
-              },
-            ),
-          ],
+    builder: (context) => _AdminTextPromptDialog(
+      title: title,
+      hint: hint,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      required: required,
+      danger: danger,
+    ),
+  );
+}
+
+class _AdminTextPromptDialog extends StatefulWidget {
+  const _AdminTextPromptDialog({
+    required this.title,
+    required this.confirmLabel,
+    required this.cancelLabel,
+    required this.required,
+    required this.danger,
+    this.hint,
+  });
+
+  final String title;
+  final String confirmLabel;
+  final String cancelLabel;
+  final bool required;
+  final bool danger;
+  final String? hint;
+
+  @override
+  State<_AdminTextPromptDialog> createState() => _AdminTextPromptDialogState();
+}
+
+class _AdminTextPromptDialogState extends State<_AdminTextPromptDialog> {
+  final TextEditingController _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    if (widget.required && text.isEmpty) {
+      setState(() => _error = 'This field is required.');
+      return;
+    }
+    Navigator.of(context).pop(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.bg1,
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLines: 3,
+        minLines: 1,
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          errorText: _error,
         ),
-      );
-    },
-  ).whenComplete(controller.dispose);
+      ),
+      actions: [
+        AppButton(
+          label: widget.cancelLabel,
+          variant: AppButtonVariant.secondary,
+          dense: true,
+          fullWidth: false,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        AppButton(
+          label: widget.confirmLabel,
+          variant:
+              widget.danger ? AppButtonVariant.danger : AppButtonVariant.primary,
+          dense: true,
+          fullWidth: false,
+          onPressed: _submit,
+        ),
+      ],
+    );
+  }
 }
 
 /// Opens [url] in the external browser, degrading to a snackbar on failure.

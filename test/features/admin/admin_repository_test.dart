@@ -483,6 +483,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/orders/approve');
       expect(req.data!['order_id'], 4205);
+      expect(req.data!['request_id'], 4205);
       expect(req.data!['note'], 'verified');
     });
 
@@ -494,6 +495,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/orders/reject');
       expect(req.data!['order_id'], 4205);
+      expect(req.data!['request_id'], 4205);
       expect(req.data!['reason'], 'invalid receipt');
     });
 
@@ -535,6 +537,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/topups/approve');
       expect(req.data!['topup_id'], 7781);
+      expect(req.data!['request_id'], 7781);
       expect(req.data!['note'], 'ok');
     });
 
@@ -546,6 +549,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/topups/reject');
       expect(req.data!['topup_id'], 7781);
+      expect(req.data!['request_id'], 7781);
       expect(req.data!['reason'], 'blurry receipt');
     });
 
@@ -587,6 +591,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/withdrawals/approve');
       expect(req.data!['withdrawal_id'], 3310);
+      expect(req.data!['request_id'], 3310);
       expect(req.data!.containsKey('note'), isFalse);
     });
 
@@ -598,6 +603,7 @@ void main() {
       final req = adapter.requests.single;
       expect(req.uri.path, '/api/v1/admin/withdrawals/reject');
       expect(req.data!['withdrawal_id'], 3310);
+      expect(req.data!['request_id'], 3310);
       expect(req.data!['reason'], 'kyc failed');
     });
 

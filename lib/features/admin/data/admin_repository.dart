@@ -223,6 +223,7 @@ class AdminRepository {
         'admin/orders/approve',
         data: {
           'order_id': orderId,
+          'request_id': orderId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
       );
@@ -236,7 +237,7 @@ class AdminRepository {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/orders/reject',
-        data: {'order_id': orderId, 'reason': reason},
+        data: {'order_id': orderId, 'request_id': orderId, 'reason': reason},
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -277,6 +278,7 @@ class AdminRepository {
         'admin/topups/approve',
         data: {
           'topup_id': topupId,
+          'request_id': topupId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
       );
@@ -290,7 +292,7 @@ class AdminRepository {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/topups/reject',
-        data: {'topup_id': topupId, 'reason': reason},
+        data: {'topup_id': topupId, 'request_id': topupId, 'reason': reason},
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -334,6 +336,7 @@ class AdminRepository {
         'admin/withdrawals/approve',
         data: {
           'withdrawal_id': withdrawalId,
+          'request_id': withdrawalId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
       );
@@ -347,7 +350,11 @@ class AdminRepository {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/withdrawals/reject',
-        data: {'withdrawal_id': withdrawalId, 'reason': reason},
+        data: {
+          'withdrawal_id': withdrawalId,
+          'request_id': withdrawalId,
+          'reason': reason,
+        },
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
