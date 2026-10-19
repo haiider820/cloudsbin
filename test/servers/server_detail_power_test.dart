@@ -194,5 +194,46 @@ void main() {
       );
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
+
+    testWidgets('offline server → Start enabled, Stop and Reboot disabled',
+        (tester) async {
+      await _pumpDetail(tester, ServerStatus.offline);
+
+      final stop = tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Stop'));
+      final start = tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Start'));
+      final reboot = tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reboot'));
+
+      expect(stop.onPressed, isNull);
+      expect(start.onPressed, isNotNull);
+      expect(reboot.onPressed, isNull);
+    });
+
+    testWidgets('stopping server → Stop, Start and Reboot all disabled',
+        (tester) async {
+      await _pumpDetail(tester, ServerStatus.stopping);
+
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Stop'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Start'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reboot'))
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('Stopping...'), findsOneWidget);
+    });
   });
 }

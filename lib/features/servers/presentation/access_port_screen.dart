@@ -84,6 +84,18 @@ class _AccessPortScreenState extends ConsumerState<AccessPortScreen> {
         context,
         result.message ?? 'Access-port change queued.',
       );
+      // Queue a delayed refresh of the server detail to show the new port.
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            ref.invalidate(serverDetailProvider(widget.serverId));
+            // Pop back to the server detail screen; the detail will reload
+            // with the updated access port.
+            if (!context.mounted) return;
+            Navigator.of(context).pop();
+          }
+        });
+      }
     } on ApiError catch (e) {
       if (!mounted) return;
       switch (e.code) {

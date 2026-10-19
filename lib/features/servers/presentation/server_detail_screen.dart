@@ -429,6 +429,7 @@ class _PowerCard extends ConsumerWidget {
         String? transition) = switch (status.raw) {
       'active' => (true, false, true, null),
       'stopped' => (false, true, false, null),
+      'offline' => (false, true, false, null),
       'stopping' => (false, false, false, 'Stopping...'),
       'booting' => (false, false, false, 'Starting...'),
       'rebooting' => (false, false, false, 'Rebooting...'),
@@ -555,8 +556,38 @@ class _PowerCard extends ConsumerWidget {
         showErrorMessageSnackBar(
             context, 'Provider unreachable. Try again shortly.');
       case 'SERVER_NOT_ACTIVE':
-      case 'SERVER_NOT_STOPPED':
         showErrorMessageSnackBar(context, error.message);
+      case 'SERVER_NOT_STOPPED':
+        // Server is not in a stopped state yet (e.g. still stopping/booting).
+        // Show a dialog with a Retry button.
+        showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Server not stopped'),
+            content: const Text(
+              'Server is not in a stopped state yet. '
+              'Wait a moment and try again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ).then((retry) {
+          if (retry == true && context.mounted) {
+            // Re-run the power start action
+            ref
+                .read(powerActionProvider(serverId).notifier)
+                .perform(PowerAction.start);
+          }
+        });
+        return;
       default:
         showErrorSnackBar(context, error);
     }

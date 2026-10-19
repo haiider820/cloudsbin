@@ -34,6 +34,12 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
   CredentialReveal? _credential;
   ApiError? _error;
 
+  /// Cached re-auth grant. Kept across a benign `409 SERVER_NOT_ACTIVE`
+  /// (the backend no longer consumes the grant on failure), so a retry does
+  /// not force the user to re-enter their password. Cleared on success and on
+  /// a `403 REAUTH_REQUIRED` (grant consumed/expired).
+  String? _grant;
+
   @override
   void initState() {
     super.initState();
@@ -41,12 +47,18 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
   }
 
   Future<void> _reveal() async {
-    final grant = await showReauthSheet(context);
-    if (!mounted) return;
+    var grant = _grant;
     if (grant == null) {
-      setState(() => _awaitingConfirm = true);
-      return;
+      final entered = await showReauthSheet(context);
+      if (!mounted) return;
+      if (entered == null) {
+        setState(() => _awaitingConfirm = true);
+        return;
+      }
+      grant = entered;
+      _grant = entered;
     }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -58,13 +70,39 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
             reauthToken: grant,
           );
       if (!mounted) return;
-      setState(() => _credential = reveal);
+      setState(() {
+        _credential = reveal;
+        _grant = null;
+      });
     } on ApiError catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
-      // 403 REAUTH_REQUIRED should not normally happen (we always pre-mint).
+      // 403 REAUTH_REQUIRED: the grant was consumed/expired — drop it so the
+      // next attempt asks for the password again.
       if (e.code == 'REAUTH_REQUIRED') {
+        _grant = null;
         showErrorSnackBar(context, e);
+      }
+      // 409 SERVER_NOT_ACTIVE: the server is not active yet. The reauth grant
+      // is NOT consumed, so keep it cached and let the user retry after
+      // starting the server — no password re-entry needed.
+      if (e.code == 'SERVER_NOT_ACTIVE') {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Server not active'),
+            content: const Text(
+              'Server must be active to reveal credentials. '
+              'Start the server first, then try again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
       }
     } catch (_) {
       if (!mounted) return;
@@ -117,6 +155,7 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
     }
     if (_credential != null) {
       return _CredentialView(
+        serverId: widget.serverId,
         credential: _credential!,
         obscure: _obscure,
         onToggleObscure: () => setState(() => _obscure = !_obscure),
@@ -137,8 +176,9 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
   }
 }
 
-class _CredentialView extends StatelessWidget {
+class _CredentialView extends ConsumerWidget {
   const _CredentialView({
+    required this.serverId,
     required this.credential,
     required this.obscure,
     required this.onToggleObscure,
@@ -146,6 +186,7 @@ class _CredentialView extends StatelessWidget {
     required this.onRegenerate,
   });
 
+  final int serverId;
   final CredentialReveal credential;
   final bool obscure;
   final VoidCallback onToggleObscure;
@@ -153,9 +194,22 @@ class _CredentialView extends StatelessWidget {
   final VoidCallback onRegenerate;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final host = credential.ipAddress ?? '';
+    final detail = ref.watch(serverDetailProvider(serverId)).valueOrNull;
+    final osLower = detail?.os?.toLowerCase() ?? '';
+    // RDP when the server advertises it (auth_type) or its OS is Windows;
+    // AWS Windows plans expose RDP on 3389, not SSH.
+    final isRdp =
+        credential.authType.raw == 'rdp' || osLower.contains('windows');
+    // `access_port` is the SSH port; Windows/RDP always listens on 3389.
+    final port = isRdp ? 3389 : (detail?.accessPort ?? 22);
+    final username = isRdp ? 'Administrator' : 'root';
+
     final value = credential.credential ?? '';
     final masked = obscure ? '••••••••••' : value;
+    final connectionLabel = isRdp ? 'RDP connection' : 'SSH connection';
+
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
@@ -163,33 +217,18 @@ class _CredentialView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionHeader(
+              SectionHeader(
                 title: 'Server credentials',
-                icon: Icons.key_outlined,
+                icon: isRdp ? Icons.desktop_windows_outlined : Icons.key_outlined,
               ),
               const SizedBox(height: AppSpacing.xs),
               InfoRow(
-                label: 'IP address',
-                value: credential.ipAddress ?? '—',
-                mono: true,
-                trailing: credential.ipAddress == null
-                    ? null
-                    : IconButton(
-                        tooltip: 'Copy',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(
-                          Icons.copy,
-                          size: 18,
-                          color: AppColors.textMuted,
-                        ),
-                        onPressed: () =>
-                            onCopy('IP address', credential.ipAddress!),
-                      ),
+                label: 'Connection',
+                value: isRdp ? 'RDP (Remote Desktop)' : 'SSH (Secure Shell)',
               ),
-              InfoRow(
-                label: 'Auth type',
-                value: credential.authType.raw,
-              ),
+              InfoRow(label: 'Host', value: host.isEmpty ? '—' : host, mono: true),
+              InfoRow(label: 'Username', value: username, mono: true),
+              InfoRow(label: 'Port', value: port.toString(), mono: true),
               const Divider(color: AppColors.line, height: AppSpacing.lg),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,9 +252,7 @@ class _CredentialView extends StatelessWidget {
                   IconButton(
                     tooltip: obscure ? 'Show' : 'Hide',
                     icon: Icon(
-                      obscure
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      obscure ? Icons.visibility_off : Icons.visibility,
                       color: AppColors.textMuted,
                     ),
                     onPressed: onToggleObscure,
@@ -231,6 +268,23 @@ class _CredentialView extends StatelessWidget {
                         : () => onCopy('Password', value),
                   ),
                 ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: 'Copy $connectionLabel',
+                icon: Icons.copy_all_outlined,
+                variant: AppButtonVariant.secondary,
+                dense: true,
+                onPressed: host.isEmpty
+                    ? null
+                    : () {
+                        // RDP string is `host:port`; SSH is a ready-to-run
+                        // `ssh user@host -p port` command.
+                        final text = isRdp
+                            ? '$host:$port'
+                            : 'ssh $username@$host -p $port';
+                        onCopy(connectionLabel, text);
+                      },
               ),
             ],
           ),

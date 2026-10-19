@@ -17,6 +17,7 @@ class ServerStatus {
   static const ServerStatus destroyed = ServerStatus._('destroyed');
   static const ServerStatus passwordPending = ServerStatus._('password_pending');
   static const ServerStatus suspended = ServerStatus._('suspended');
+  static const ServerStatus offline = ServerStatus._('offline');
   static const ServerStatus terminated = ServerStatus._('terminated');
   static const ServerStatus failed = ServerStatus._('failed');
   static const ServerStatus scaling = ServerStatus._('scaling');
@@ -29,6 +30,7 @@ class ServerStatus {
     rebooting,
     active,
     destroyed,
+    offline,
     passwordPending,
     suspended,
     terminated,

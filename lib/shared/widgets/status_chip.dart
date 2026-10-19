@@ -5,7 +5,7 @@ import '../enums/app_enums.dart';
 
 /// Colour-coded server status pill, tuned for the dark brand theme.
 /// active=green · provisioning/booting=amber · destroyed/terminated=grey ·
-/// suspended/locked=red · others=orange.
+/// suspended/locked=red · offline=grey · stopping=amber · others=orange.
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.status});
 
@@ -15,12 +15,14 @@ class StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color bg, Color fg) = switch (status.raw) {
       'active' => (AppColors.activeBg, AppColors.activeFg),
-      'provisioning' || 'booting' =>
+      'provisioning' || 'booting' || 'stopping' =>
         (AppColors.pendingBg, AppColors.pendingFg),
       'destroyed' || 'terminated' =>
         (AppColors.inactiveBg, AppColors.inactiveFg),
       'suspended' || 'locked' =>
         (AppColors.dangerBg, AppColors.dangerFg),
+      'offline' =>
+        (AppColors.inactiveBg, AppColors.inactiveFg),
       _ => (AppColors.attentionBg, AppColors.attentionFg),
     };
 
