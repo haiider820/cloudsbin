@@ -25,18 +25,32 @@ class AppShimmer extends StatelessWidget {
     return Shimmer.fromColors(
       baseColor: AppColors.bg2,
       highlightColor: AppColors.bg3,
-      child: Column(
-        children: List.generate(
-          itemCount,
-          (_) => Container(
-            height: itemHeight,
-            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: AppColors.bg2,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Render only the placeholders that fit the available height so the
+          // shimmer never overflows a bounded slot (e.g. a list area).
+          var count = itemCount;
+          if (constraints.maxHeight.isFinite) {
+            final slot = itemHeight + AppSpacing.sm;
+            final fit = (constraints.maxHeight / slot).floor();
+            count = fit > itemCount ? itemCount : fit;
+          }
+          if (count <= 0) return const SizedBox.shrink();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(
+              count,
+              (_) => Container(
+                height: itemHeight,
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.bg2,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
