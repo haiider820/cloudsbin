@@ -38,11 +38,18 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen> {
       required: false,
     );
     if (note == null) return;
+    if (!mounted) return;
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .approveOrder(order.id, note.isEmpty ? null : note);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).approveOrder(
+              order.id,
+              note.isEmpty ? null : note,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Order #${order.id} approved.');
       setState(() => _tick++);
     } on ApiError catch (e) {
@@ -59,11 +66,18 @@ class _AdminOrdersScreenState extends ConsumerState<AdminOrdersScreen> {
       danger: true,
     );
     if (reason == null) return;
+    if (!mounted) return;
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .rejectOrder(order.id, reason);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).rejectOrder(
+              order.id,
+              reason,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Order #${order.id} rejected.');
       setState(() => _tick++);
     } on ApiError catch (e) {

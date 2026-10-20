@@ -38,11 +38,18 @@ class _AdminTopupsScreenState extends ConsumerState<AdminTopupsScreen> {
       required: false,
     );
     if (note == null) return;
+    if (!mounted) return;
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .approveTopup(topup.id, note.isEmpty ? null : note);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).approveTopup(
+              topup.id,
+              note.isEmpty ? null : note,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Top-up #${topup.id} approved.');
       setState(() => _tick++);
     } on ApiError catch (e) {
@@ -59,9 +66,18 @@ class _AdminTopupsScreenState extends ConsumerState<AdminTopupsScreen> {
       danger: true,
     );
     if (reason == null) return;
+    if (!mounted) return;
     try {
-      await ref.read(adminRepositoryProvider).rejectTopup(topup.id, reason);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).rejectTopup(
+              topup.id,
+              reason,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Top-up #${topup.id} rejected.');
       setState(() => _tick++);
     } on ApiError catch (e) {

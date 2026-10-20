@@ -17,17 +17,24 @@ import 'app_text_field.dart';
 ///
 /// Restyled with the brand theme. Copy strings are contract — the widget
 /// test asserts 'Confirm', 'Password is required.' and 'Invalid password.'.
-Future<String?> showReauthSheet(BuildContext context) {
+Future<String?> showReauthSheet(
+  BuildContext context, {
+  Future<String> Function(String password)? mint,
+}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const ReauthSheet(),
+    builder: (_) => ReauthSheet(mint: mint),
   );
 }
 
 class ReauthSheet extends ConsumerStatefulWidget {
-  const ReauthSheet({super.key});
+  const ReauthSheet({super.key, this.mint});
+
+  /// Mints a grant from [password]. Defaults to the user-audience repository;
+  /// the admin audience passes `POST /admin/auth/reauth` instead.
+  final Future<String> Function(String password)? mint;
 
   @override
   ConsumerState<ReauthSheet> createState() => _ReauthSheetState();
@@ -55,7 +62,9 @@ class _ReauthSheetState extends ConsumerState<ReauthSheet> {
       _error = null;
     });
     try {
-      final grant = await ref.read(authRepositoryProvider).reauth(password);
+      final mint =
+          widget.mint ?? (p) => ref.read(authRepositoryProvider).reauth(p);
+      final grant = await mint(password);
       if (!mounted) return;
       Navigator.of(context).pop(grant);
     } on ApiError catch (e) {

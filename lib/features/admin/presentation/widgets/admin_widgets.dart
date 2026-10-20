@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/api/api_error.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/error_snackbar.dart';
+import '../../../../shared/widgets/reauth_sheet.dart';
+import '../../data/admin_auth_repository.dart';
 
 /// A colour-coded pill for admin statuses (order/topup/withdrawal/ticket).
 class AdminStatusPill extends StatelessWidget {
@@ -300,6 +304,36 @@ class _AdminTextPromptDialogState extends State<_AdminTextPromptDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Prompts for the admin password and mints a single-use re-auth grant
+/// (`POST /admin/auth/reauth`).
+Future<String?> showAdminReauthSheet(BuildContext context, WidgetRef ref) {
+  return showReauthSheet(
+    context,
+    mint: (password) => ref.read(adminAuthRepositoryProvider).reauth(password),
+  );
+}
+
+/// Runs [action], retrying once with an admin re-auth grant when the API
+/// answers `403 REAUTH_REQUIRED` (dangerous admin mutations are step-up gated).
+/// Returns false when the operator dismisses the password sheet.
+Future<bool> runWithAdminReauth(
+  BuildContext context,
+  WidgetRef ref,
+  Future<void> Function(String? reauthToken) action,
+) async {
+  try {
+    await action(null);
+    return true;
+  } on ApiError catch (e) {
+    if (e.code != 'REAUTH_REQUIRED') rethrow;
+    if (!context.mounted) return false;
+    final grant = await showAdminReauthSheet(context, ref);
+    if (grant == null) return false;
+    await action(grant);
+    return true;
   }
 }
 

@@ -41,11 +41,18 @@ class _AdminWithdrawalsScreenState
       required: false,
     );
     if (note == null) return;
+    if (!mounted) return;
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .approveWithdrawal(w.id, note.isEmpty ? null : note);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).approveWithdrawal(
+              w.id,
+              note.isEmpty ? null : note,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Withdrawal #${w.id} approved.');
       setState(() => _tick++);
     } on ApiError catch (e) {
@@ -62,9 +69,18 @@ class _AdminWithdrawalsScreenState
       danger: true,
     );
     if (reason == null) return;
+    if (!mounted) return;
     try {
-      await ref.read(adminRepositoryProvider).rejectWithdrawal(w.id, reason);
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).rejectWithdrawal(
+              w.id,
+              reason,
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Withdrawal #${w.id} rejected.');
       setState(() => _tick++);
     } on ApiError catch (e) {

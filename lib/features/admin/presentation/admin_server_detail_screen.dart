@@ -15,6 +15,7 @@ import '../../../shared/widgets/error_snackbar.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../data/admin_repository.dart';
 import '../data/models/admin_server.dart';
+import 'widgets/admin_widgets.dart';
 
 /// `GET /admin/servers/detail` — full server info + force refresh/destroy.
 class AdminServerDetailScreen extends ConsumerStatefulWidget {
@@ -70,13 +71,19 @@ class _AdminServerDetailScreenState
       danger: true,
       icon: Icons.warning_amber_outlined,
     );
-    if (!confirmed) return;
+    if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .forceDestroyServer(server.id, 'Force-destroyed by admin');
-      if (!mounted) return;
+      final performed = await runWithAdminReauth(
+        context,
+        ref,
+        (grant) => ref.read(adminRepositoryProvider).forceDestroyServer(
+              server.id,
+              'Force-destroyed by admin',
+              reauthToken: grant,
+            ),
+      );
+      if (!performed || !mounted) return;
       showInfoSnackBar(context, 'Server force-destroyed.');
       _reload();
     } on ApiError catch (e) {

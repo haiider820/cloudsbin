@@ -25,6 +25,12 @@ class AdminRepository {
 
   final ApiClient _client;
 
+  /// Step-up grants are attached as `X-Reauth-Token` for the dangerous admin
+  /// mutations. Omitted entirely when the caller has no grant yet.
+  Options? _reauthOptions(String? reauthToken) => reauthToken == null
+      ? null
+      : Options(headers: {'X-Reauth-Token': reauthToken});
+
   /// `GET /admin/dashboard`.
   Future<AdminDashboard> getDashboard() async {
     try {
@@ -105,12 +111,14 @@ class AdminRepository {
   Future<String> adjustWallet(
     int userId,
     double amountUsd,
-    String note,
-  ) async {
+    String note, {
+    String? reauthToken,
+  }) async {
     try {
       final response = await _client.dio.post<Map<String, dynamic>>(
         'admin/users/adjust-wallet',
         data: {'user_id': userId, 'amount_usd': amountUsd, 'note': note},
+        options: _reauthOptions(reauthToken),
       );
       return response.data?['message']?.toString() ?? 'Wallet adjusted.';
     } on DioException catch (e) {
@@ -161,7 +169,11 @@ class AdminRepository {
   }
 
   /// `POST /admin/servers/force-destroy`.
-  Future<void> forceDestroyServer(int serverId, String? note) async {
+  Future<void> forceDestroyServer(
+    int serverId,
+    String? note, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/servers/force-destroy',
@@ -169,6 +181,7 @@ class AdminRepository {
           'server_id': serverId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -217,7 +230,11 @@ class AdminRepository {
   }
 
   /// `POST /admin/orders/approve`.
-  Future<void> approveOrder(int orderId, String? note) async {
+  Future<void> approveOrder(
+    int orderId,
+    String? note, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/orders/approve',
@@ -226,6 +243,7 @@ class AdminRepository {
           'request_id': orderId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -233,11 +251,16 @@ class AdminRepository {
   }
 
   /// `POST /admin/orders/reject`.
-  Future<void> rejectOrder(int orderId, String reason) async {
+  Future<void> rejectOrder(
+    int orderId,
+    String reason, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/orders/reject',
         data: {'order_id': orderId, 'request_id': orderId, 'reason': reason},
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -272,7 +295,11 @@ class AdminRepository {
   }
 
   /// `POST /admin/topups/approve`.
-  Future<void> approveTopup(int topupId, String? note) async {
+  Future<void> approveTopup(
+    int topupId,
+    String? note, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/topups/approve',
@@ -281,6 +308,7 @@ class AdminRepository {
           'request_id': topupId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -288,11 +316,16 @@ class AdminRepository {
   }
 
   /// `POST /admin/topups/reject`.
-  Future<void> rejectTopup(int topupId, String reason) async {
+  Future<void> rejectTopup(
+    int topupId,
+    String reason, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/topups/reject',
         data: {'topup_id': topupId, 'request_id': topupId, 'reason': reason},
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -330,7 +363,11 @@ class AdminRepository {
   }
 
   /// `POST /admin/withdrawals/approve`.
-  Future<void> approveWithdrawal(int withdrawalId, String? note) async {
+  Future<void> approveWithdrawal(
+    int withdrawalId,
+    String? note, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/withdrawals/approve',
@@ -339,6 +376,7 @@ class AdminRepository {
           'request_id': withdrawalId,
           if (note != null && note.isNotEmpty) 'note': note,
         },
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);
@@ -346,7 +384,11 @@ class AdminRepository {
   }
 
   /// `POST /admin/withdrawals/reject`.
-  Future<void> rejectWithdrawal(int withdrawalId, String reason) async {
+  Future<void> rejectWithdrawal(
+    int withdrawalId,
+    String reason, {
+    String? reauthToken,
+  }) async {
     try {
       await _client.dio.post<Map<String, dynamic>>(
         'admin/withdrawals/reject',
@@ -355,6 +397,7 @@ class AdminRepository {
           'request_id': withdrawalId,
           'reason': reason,
         },
+        options: _reauthOptions(reauthToken),
       );
     } on DioException catch (e) {
       throw ApiError.fromDio(e);

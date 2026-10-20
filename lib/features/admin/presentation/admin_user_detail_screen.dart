@@ -132,13 +132,20 @@ class _AdminUserDetailScreenState
       builder: (context) => const _AdjustWalletSheet(),
     );
     if (result == null) return;
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
-      final message = await ref
-          .read(adminRepositoryProvider)
-          .adjustWallet(user.id, result.$1, result.$2);
-      if (!mounted) return;
-      showInfoSnackBar(context, message);
+      String? message;
+      final performed = await runWithAdminReauth(context, ref, (grant) async {
+        message = await ref.read(adminRepositoryProvider).adjustWallet(
+              user.id,
+              result.$1,
+              result.$2,
+              reauthToken: grant,
+            );
+      });
+      if (!performed || !mounted) return;
+      showInfoSnackBar(context, message ?? 'Wallet adjusted.');
       _reload();
     } on ApiError catch (e) {
       if (mounted) showErrorSnackBar(context, e);

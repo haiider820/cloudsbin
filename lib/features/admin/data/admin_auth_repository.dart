@@ -89,6 +89,28 @@ class AdminAuthRepository {
     }
   }
 
+  /// `POST /admin/auth/reauth {"password"}` — mints a single-use step-up grant
+  /// for the dangerous admin mutations (approve/reject, wallet adjust, force
+  /// destroy). The grant is returned to the caller and never stored.
+  Future<String> reauth(String password) async {
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        'admin/auth/reauth',
+        data: {'password': password},
+      );
+      final token = response.data?['reauth_token']?.toString();
+      if (token == null || token.isEmpty) {
+        throw const ApiError(
+          code: 'SERVER_ERROR',
+          message: 'No re-auth token returned.',
+        );
+      }
+      return token;
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+
   /// `POST /admin/auth/sessions-revoke {"session_id"}` → `{"revoked": true}`.
   Future<bool> revokeSession(int sessionId) async {
     try {

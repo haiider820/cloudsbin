@@ -69,6 +69,24 @@ void main() {
       expect(storage.values['refresh_token'], isNull);
     });
 
+    test('reauth mints a single-use grant from the admin endpoint', () async {
+      final adapter = script(const [
+        ScriptedResponse(200, {
+          'reauth_token': 'grant-abc',
+          'expires_at': '2026-10-19T08:00:00Z',
+        }),
+      ]);
+
+      final grant = await repo.reauth('hostadmin');
+
+      expect(grant, 'grant-abc');
+      final req = adapter.requests.single;
+      expect(req.uri.path, '/api/v1/admin/auth/reauth');
+      expect(req.data!['password'], 'hostadmin');
+      // The grant is returned to the caller and never persisted.
+      expect(storage.values.values, isNot(contains('grant-abc')));
+    });
+
     test('logout clears only the admin keys, user tokens survive', () async {
       storage.values
         ..['admin_access_token'] = 'aa'
@@ -485,6 +503,43 @@ void main() {
       expect(req.data!['order_id'], 4205);
       expect(req.data!['request_id'], 4205);
       expect(req.data!['note'], 'verified');
+    });
+
+    test('approveOrder forwards the step-up grant as X-Reauth-Token', () async {
+      final adapter = script(const [ScriptedResponse(200, {'message': 'ok'})]);
+
+      await mgmt.approveOrder(4205, null, reauthToken: 'grant-1');
+
+      expect(
+        adapter.requests.single.headers['X-Reauth-Token'],
+        'grant-1',
+      );
+    });
+
+    test('step-up grant is forwarded on every dangerous mutation', () async {
+      final adapter = script(
+        List.generate(
+          8,
+          (_) => const ScriptedResponse(
+            200,
+            {'message': 'ok', 'wallet_balance_usd': 1},
+          ),
+        ),
+      );
+
+      await mgmt.approveOrder(1, null, reauthToken: 'g');
+      await mgmt.rejectOrder(1, 'r', reauthToken: 'g');
+      await mgmt.approveTopup(1, null, reauthToken: 'g');
+      await mgmt.rejectTopup(1, 'r', reauthToken: 'g');
+      await mgmt.approveWithdrawal(1, null, reauthToken: 'g');
+      await mgmt.rejectWithdrawal(1, 'r', reauthToken: 'g');
+      await mgmt.adjustWallet(1, 5, 'n', reauthToken: 'g');
+      await mgmt.forceDestroyServer(1, null, reauthToken: 'g');
+
+      expect(adapter.requests, hasLength(8));
+      for (final req in adapter.requests) {
+        expect(req.headers['X-Reauth-Token'], 'g', reason: req.uri.path);
+      }
     });
 
     test('rejectOrder posts order_id + reason', () async {
